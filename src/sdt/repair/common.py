@@ -17,12 +17,44 @@ log = logging.getLogger(__name__)
 StateDict = dict[str, Any]
 
 
+def unique_tensors(state: StateDict) -> StateDict:
+    """Drops keys that alias an earlier key's storage (tied weights such as lm_head = embeddings).
+
+    Tiny Aya ties its output head to the input embeddings: `state_dict()` lists both keys, but
+    they are one tensor. Keeping both lets a repair patch one copy and not the other, and loading
+    them back writes the unpatched copy over the patched one. Each tensor is kept once here and
+    re-tied when the model is saved.
+    """
+    seen: set[tuple[int, int]] = set()
+    out = {}
+    for key, value in state.items():
+        ident = (value.untyped_storage().data_ptr(), value.storage_offset())
+        if ident in seen:
+            continue
+        seen.add(ident)
+        out[key] = value
+    return out
+
+
 def load_state_dict(config: Config, name: str) -> StateDict:
-    """All weights of a model on CPU, in bf16."""
+    """All weights of a model on CPU, in bf16, each tied tensor once."""
     from sdt.models import load_hf_model
 
     model = load_hf_model(config.model_path(name), device_map="cpu")
-    return {k: v.detach() for k, v in model.state_dict().items()}
+    return unique_tensors({k: v.detach() for k, v in model.state_dict().items()})
+
+
+def apply_state(model, state: StateDict) -> None:
+    """Loads `state` into `model`; only tied aliases may be missing, and they are re-tied."""
+    result = model.load_state_dict(state, strict=False)
+    tied = set(model.state_dict()) - set(unique_tensors(model.state_dict()))
+    unexpected = list(result.unexpected_keys)
+    missing = [k for k in result.missing_keys if k not in tied]
+    if unexpected or missing:
+        raise ValueError(
+            f"State does not match the model: missing {missing}, unexpected {unexpected}"
+        )
+    model.tie_weights()
 
 
 def is_patchable(tensor) -> bool:
@@ -46,7 +78,7 @@ def save_model(config: Config, state: StateDict, name: str, skeleton: str = "dri
 
     out = config.runs_dir / "models" / name
     model = load_hf_model(config.model_path(skeleton), device_map="cpu")
-    model.load_state_dict(state)
+    apply_state(model, state)
     model.save_pretrained(out, safe_serialization=True)
     load_tokenizer(config.model_path(skeleton)).save_pretrained(out)
     log.info("Saved %s", out)

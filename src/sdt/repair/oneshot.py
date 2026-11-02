@@ -56,7 +56,9 @@ def oneshot_patch(
     out = {}
     for key, value in drifted.items():
         if key in saliency and is_patchable(value):
-            mask = saliency[key] >= threshold
+            # Zero saliency means no evidence the weight matters (or no difference to restore):
+            # never patch it, even when the requested fraction reaches into the zeros.
+            mask = (saliency[key] >= threshold) & (saliency[key] > 0)
             out[key] = torch.where(mask, aligned[key].to(value.dtype), value)
         else:
             out[key] = value
@@ -108,7 +110,7 @@ def compute_saliency(config: Config, aligned: StateDict) -> StateDict:
 
     path = config.model_path("drifted")
     model, tok = load_hf_model(path), load_tokenizer(path)
-    model.train()
+    model.eval()  # gradients still flow; eval() only switches off dropout so saliency is deterministic
     tok.padding_side = "right"
     pairs = refusal_pairs(config)
     for i in range(0, len(pairs), 4):
