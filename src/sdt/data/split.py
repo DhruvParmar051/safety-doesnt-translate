@@ -55,3 +55,15 @@ def check_no_leak(records: list[PromptRecord]) -> None:
     ids = [rec.id for rec in records]
     if len(ids) != len(set(ids)):
         raise ValueError("Duplicate record ids")
+
+
+def select_groups(
+    records: list[PromptRecord], source: str, n: int | None, seed: int
+) -> list[PromptRecord]:
+    """Keeps only `n` prompt groups of `source` (the same groups in every language); others pass."""
+    if n is None:
+        return records
+    groups = sorted({r.source_id or r.id for r in records if r.source == source})
+    groups.sort(key=lambda g: stable_bucket(f"{seed}:{source}:{g}", 1_000_000))
+    keep = set(groups[:n])
+    return [r for r in records if r.source != source or (r.source_id or r.id) in keep]

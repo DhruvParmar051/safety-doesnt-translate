@@ -8,7 +8,7 @@ from collections import Counter
 from sdt.config import Config, save_run_config
 from sdt.data import sources
 from sdt.data.curate import curate
-from sdt.data.split import assign_splits, cap_per_language, check_no_leak
+from sdt.data.split import assign_splits, cap_per_language, check_no_leak, select_groups
 from sdt.data.translate import translate_xstest
 from sdt.io import read_jsonl, write_jsonl
 from sdt.schema import Kind, PromptRecord, Split
@@ -39,6 +39,7 @@ def fetch_sources(config: Config) -> None:
 def translate(config: Config) -> None:
     """Translates XSTest; writes data/raw/xstest_translated.jsonl and back-translations."""
     english = _load(config.data_dir / "raw" / "xstest_en.jsonl")
+    english = select_groups(english, "xstest", config["data"].get("xstest_groups"), config.seed)
     translated, back = translate_xstest(config, english)
     write_jsonl(config.data_dir / "raw" / "xstest_translated.jsonl", translated)
     write_jsonl(
@@ -58,6 +59,7 @@ def build(config: Config) -> list[PromptRecord]:
                 f"{path} missing: run `sdt data sources` and `sdt data translate`"
             )
         records += _load(path)
+    records = select_groups(records, "xstest", config["data"].get("xstest_groups"), config.seed)
 
     english = {r.source_id: r.prompt for r in records if r.source == "xstest" and r.lang == "en"}
     back = {row["id"]: row["text"] for row in read_jsonl(raw / "xstest_backtranslation.jsonl")}
