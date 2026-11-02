@@ -41,6 +41,7 @@ data:
   xstest:
     url: https://raw.githubusercontent.com/paul-rottger/xstest/main/xstest_prompts.csv
   harmful_per_language: 300      # cap so every language weighs the same
+  xstest_groups: null            # null = all 450 XSTest prompts; a number keeps that many (same in every language)
   calib_fraction: 0.33           # rest is test
   xstest_calib_fraction: 0.2
   curate:
@@ -49,7 +50,7 @@ data:
     min_backtranslation_similarity: 0.5
 
 generation:
-  backend: vllm                  # vllm | hf (hf is used for steering and 4-bit models)
+  backend: vllm                  # vllm (CUDA) | mlx (Apple Silicon) | hf (always used for steering and 4-bit)
   max_new_tokens: 256
   temperature: 0.0
   batch_size: 32
@@ -78,6 +79,7 @@ finetune:
   batch_size: 8
   grad_accum: 2
   max_seq_len: 1024
+  gradient_checkpointing: false
 
 locate:
   calib_per_language: 64         # harmful and harmless prompts each
@@ -91,5 +93,6 @@ capability:
   per_language: 200              # en, es, ar, hi, bn, sw are covered; ru and fil are not
 
 compress:
+  backend: auto                  # auto = bitsandbytes on CUDA, optimum-quanto elsewhere
   protect_top_components: 20
   bnb_quant_type: nf4
