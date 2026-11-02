@@ -1,0 +1,24 @@
+# Repair methods compared in phase 4. Each entry becomes runs/models/repair-<name>.
+task_arithmetic:
+  scales: [0.25, 0.5, 0.75, 1.0]   # strength of the safety vector (Global - Base)
+
+oneshot:
+  fractions: [0.001, 0.005, 0.01]  # share of weights copied back from Global
+
+circuit_patch:
+  top_k: [5, 10, 20]               # components from runs/locate/components.json
+
+resta:
+  alpha: 0.5
+
+steer:
+  alpha: 0.3                       # SafeTune says its default (20) is far too strong
+  layer: 24
+
+# Methods run through the SafeTune CLI. VERIFY(M1): replace with names printed by `safetune list`.
+safetune_cli:
+  - somf
+  - safemerge
+
+safety_finetune:                   # baseline: this IS retraining; the bar to beat on cost
+  refusals_per_language: 50

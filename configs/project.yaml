@@ -1,0 +1,95 @@
+# Every model id, language, path and hyperparameter the pipeline uses.
+seed: 0
+
+paths:
+  data_dir: data
+  runs_dir: runs
+  results_dir: results
+
+# ISO 639-1 codes (Filipino = fil). `region` ties each language to the regional
+# Tiny Aya variant whose training mix favours it (model cards, Nov 2026).
+languages:
+  en: { name: English, resource: high, region: european, variant: water }
+  es: { name: Spanish, resource: high, region: european, variant: water }
+  ru: { name: Russian, resource: high, region: european, variant: water }
+  ar: { name: Arabic, resource: high, region: west_asian, variant: earth }
+  hi: { name: Hindi, resource: mid, region: south_asian, variant: fire }
+  fil: { name: Filipino, resource: mid, region: asia_pacific, variant: water }
+  bn: { name: Bengali, resource: low, region: south_asian, variant: fire }
+  sw: { name: Swahili, resource: low, region: african, variant: earth }
+
+models:
+  # Subjects. Names that are not here resolve to runs/models/<name>.
+  global: CohereLabs/tiny-aya-global
+  base: CohereLabs/tiny-aya-base
+  fire: CohereLabs/tiny-aya-fire
+  water: CohereLabs/tiny-aya-water
+  earth: CohereLabs/tiny-aya-earth
+  # Helpers.
+  translator: CohereLabs/aya-expanse-8b
+  judge_primary: CohereLabs/aya-expanse-32b
+  judge_secondary: meta-llama/Llama-Guard-3-8B
+
+data:
+  aya_redteaming:
+    repo: CohereLabs/aya_redteaming
+    # split name in the repo -> our code
+    splits: { english: en, spanish: es, russian: ru, arabic: ar, hindi: hi, filipino: fil }
+  multijail:
+    repo: DAMO-NLP-SG/MultiJail
+    columns: [en, ar, bn, sw]
+  xstest:
+    url: https://raw.githubusercontent.com/paul-rottger/xstest/main/xstest_prompts.csv
+  harmful_per_language: 300      # cap so every language weighs the same
+  calib_fraction: 0.33           # rest is test
+  xstest_calib_fraction: 0.2
+  curate:
+    min_chars: 8
+    max_length_ratio: 3.0        # translated / source length
+    min_backtranslation_similarity: 0.5
+
+generation:
+  backend: vllm                  # vllm | hf (hf is used for steering and 4-bit models)
+  max_new_tokens: 256
+  temperature: 0.0
+  batch_size: 32
+  max_model_len: 4096
+
+judge:
+  primary: aya
+  secondary: llama_guard
+  hand_label_per_language: 40
+
+task:
+  # Harmless fine-tune that drifts safety (Qi et al., 2023). VERIFY(M1): language codes.
+  dataset: CohereLabs/aya_dataset
+  language_codes: { en: eng, es: spa, ru: rus, ar: arb, hi: hin, fil: fil, bn: ben, sw: swh }
+  train_per_language: 250
+  eval_per_language: 25
+  max_target_chars: 1500
+
+finetune:
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  learning_rate: 2.0e-4
+  epochs: 3
+  batch_size: 8
+  grad_accum: 2
+  max_seq_len: 1024
+
+locate:
+  calib_per_language: 64         # harmful and harmless prompts each
+  direction_layer: 24            # SafeTune's Tiny Aya notes pick layer 24 of 36
+  top_components: 20
+  activation_patch_top: 10
+
+capability:
+  dataset: CohereLabs/Global-MMLU-Lite
+  split: test
+  per_language: 200              # en, es, ar, hi, bn, sw are covered; ru and fil are not
+
+compress:
+  protect_top_components: 20
+  bnb_quant_type: nf4
