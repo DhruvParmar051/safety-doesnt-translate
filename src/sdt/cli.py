@@ -200,6 +200,12 @@ def _publish(cfg, args) -> None:
         publish.push_logs(cfg, args.repo, private)
 
 
+def _doctor(cfg, args) -> None:
+    from sdt.doctor import run_doctor
+
+    sys.exit(0 if run_doctor(cfg) else 1)
+
+
 def _smoke(cfg, args) -> None:
     from sdt.locate.circuitkit_adapter import parity_check
 
@@ -209,8 +215,14 @@ def _smoke(cfg, args) -> None:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="sdt", description=__doc__)
     p.add_argument("--config", default=None, help="path to project.yaml")
+    p.add_argument(
+        "--profile", default=None, help="config overlay, e.g. 'mac' (or set SDT_PROFILE)"
+    )
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="command", required=True)
+
+    s = sub.add_parser("doctor", help="check device, packages and model access on this machine")
+    s.set_defaults(fn=_doctor)
 
     s = sub.add_parser("smoke", help="CircuitKIT parity check on a model")
     s.add_argument("--model", default="global")
@@ -228,7 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
         s.add_argument("model")
         s.add_argument("--split", default="test", choices=["test", "calib"])
         if cmd == "generate":
-            s.add_argument("--backend", choices=["vllm", "hf"])
+            s.add_argument("--backend", choices=["vllm", "mlx", "hf"])
         else:
             s.add_argument("--judge", action="append", choices=["aya", "llama_guard"])
         s.set_defaults(fn=fn)
@@ -239,7 +251,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("evaluate", help="generate + judge + metrics + capability + task score")
     s.add_argument("model")
-    s.add_argument("--backend", choices=["vllm", "hf"])
+    s.add_argument("--backend", choices=["vllm", "mlx", "hf"])
     s.add_argument("--no-capability", action="store_true")
     s.add_argument("--no-task", action="store_true")
     s.set_defaults(fn=_evaluate)
@@ -308,7 +320,11 @@ def main(argv: list[str] | None = None) -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    cfg = load_config(args.config) if args.config else load_config()
+    cfg = (
+        load_config(args.config, profile=args.profile)
+        if args.config
+        else load_config(profile=args.profile)
+    )
     args.fn(cfg, args)
 
 
