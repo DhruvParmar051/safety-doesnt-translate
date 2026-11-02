@@ -51,7 +51,7 @@ data:
 
 generation:
   backend: vllm                  # vllm (CUDA) | mlx (Apple Silicon) | hf (always used for steering and 4-bit)
-  max_new_tokens: 256
+  max_new_tokens: 512            # harmful content can follow a long preamble; 256 cut some off
   temperature: 0.0
   batch_size: 32
   max_model_len: 4096
