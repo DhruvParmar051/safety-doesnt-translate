@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -61,7 +62,11 @@ def curate(
     work_dir = config.data_dir / "interim"
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    keep_ids = curatorkit_keep_set(records, work_dir)
+    # XSTest's safe/unsafe contrast pairs differ by a word or two on purpose ("kill a Python
+    # process" vs "kill a person"); near-duplicate removal would delete half of each pair. So
+    # CuratorKIT only sees the native harmful sources; XSTest still gets the exact-match and
+    # translation checks below.
+    keep_ids = curatorkit_keep_set([r for r in records if r.source != "xstest"], work_dir)
     kept: list[PromptRecord] = []
     rejected: list[Rejection] = []
     seen: set[tuple[str, str]] = set()
@@ -73,7 +78,7 @@ def curate(
             reason = "too_short"
         elif key in seen:
             reason = "duplicate"
-        elif keep_ids is not None and rec.id not in keep_ids:
+        elif keep_ids is not None and rec.source != "xstest" and rec.id not in keep_ids:
             reason = "curatorkit"
         elif script_share(rec.prompt, rec.lang) < MIN_SCRIPT_SHARE:
             reason = "wrong_script"
@@ -94,4 +99,8 @@ def curate(
             kept.append(rec)
 
     log.info("Curated: kept %d, rejected %d", len(kept), len(rejected))
+    source_of = {r.id: r.source for r in records}
+    summary = Counter((source_of[r.id], r.lang, r.reason) for r in rejected)
+    for (source, lang, reason), n in sorted(summary.items()):
+        log.info("  rejected %-15s %-4s %-16s %d", source, lang, reason, n)
     return kept, rejected

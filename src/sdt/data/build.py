@@ -8,7 +8,14 @@ from collections import Counter
 from sdt.config import Config, save_run_config
 from sdt.data import sources
 from sdt.data.curate import curate
-from sdt.data.split import assign_splits, cap_per_language, check_no_leak, select_groups
+from sdt.data.split import (
+    PARALLEL_SOURCE,
+    align_parallel,
+    assign_splits,
+    cap_per_language,
+    check_no_leak,
+    select_groups,
+)
 from sdt.data.translate import translate_xstest
 from sdt.io import read_jsonl, write_jsonl
 from sdt.schema import Kind, PromptRecord, Split
@@ -65,6 +72,11 @@ def build(config: Config) -> list[PromptRecord]:
     back = {row["id"]: row["text"] for row in read_jsonl(raw / "xstest_backtranslation.jsonl")}
     kept, rejected = curate(config, records, back, english)
     write_jsonl(config.data_dir / "interim" / "rejected.jsonl", rejected)
+    before = len(kept)
+    kept = align_parallel(kept, PARALLEL_SOURCE, config.languages)
+    log.info(
+        "Parallel alignment dropped %d XSTest rows missing in some language", before - len(kept)
+    )
 
     spec = config["data"]
     kept = cap_per_language(kept, Kind.HARMFUL, spec["harmful_per_language"], config.seed)

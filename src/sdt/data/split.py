@@ -9,15 +9,22 @@ from dataclasses import replace
 from sdt.data.sources import stable_bucket
 from sdt.schema import Kind, PromptRecord, Split
 
+PARALLEL_SOURCE = "xstest"  # translated into every language; never capped or sampled per language
+
 
 def cap_per_language(
     records: list[PromptRecord], kind: Kind, cap: int, seed: int
 ) -> list[PromptRecord]:
-    """Keeps at most `cap` records of `kind` per language (deterministic); others pass through."""
+    """Keeps at most `cap` native records of `kind` per language (deterministic).
+
+    Parallel XSTest records pass through untouched: sampling them per language would give each
+    language different prompts and break the like-for-like comparison.
+    """
     groups: dict[str, list[PromptRecord]] = defaultdict(list)
     others = []
     for rec in records:
-        (groups[rec.lang] if rec.kind == kind else others).append(rec)
+        capped_here = rec.kind == kind and rec.source != PARALLEL_SOURCE
+        (groups[rec.lang] if capped_here else others).append(rec)
     capped = []
     for lang in sorted(groups):
         rows = sorted(groups[lang], key=lambda r: r.id)
@@ -60,10 +67,38 @@ def check_no_leak(records: list[PromptRecord]) -> None:
 def select_groups(
     records: list[PromptRecord], source: str, n: int | None, seed: int
 ) -> list[PromptRecord]:
-    """Keeps only `n` prompt groups of `source` (the same groups in every language); others pass."""
+    """Keeps `n` prompt groups of `source`, the same groups in every language; others pass.
+
+    Groups are chosen per kind in proportion to the source's own mix, so a small sample keeps
+    XSTest's balance of safe and unsafe prompts.
+    """
     if n is None:
         return records
-    groups = sorted({r.source_id or r.id for r in records if r.source == source})
-    groups.sort(key=lambda g: stable_bucket(f"{seed}:{source}:{g}", 1_000_000))
-    keep = set(groups[:n])
+    kind_of: dict[str, Kind] = {}
+    for r in records:
+        if r.source == source:
+            kind_of.setdefault(r.source_id or r.id, r.kind)
+    by_kind: dict[Kind, list[str]] = defaultdict(list)
+    for group, kind in kind_of.items():
+        by_kind[kind].append(group)
+    keep: set[str] = set()
+    total = len(kind_of)
+    for _kind, groups in sorted(by_kind.items()):
+        groups.sort(key=lambda g: stable_bucket(f"{seed}:{source}:{g}", 1_000_000))
+        keep.update(groups[: round(n * len(groups) / total)])
     return [r for r in records if r.source != source or (r.source_id or r.id) in keep]
+
+
+def align_parallel(
+    records: list[PromptRecord], source: str, languages: list[str]
+) -> list[PromptRecord]:
+    """Drops a `source` prompt group unless it survived curation in every language.
+
+    Then every language is scored on exactly the same XSTest prompts.
+    """
+    present: dict[str, set[str]] = defaultdict(set)
+    for r in records:
+        if r.source == source:
+            present[r.source_id or r.id].add(r.lang)
+    complete = {g for g, langs in present.items() if set(languages) <= langs}
+    return [r for r in records if r.source != source or (r.source_id or r.id) in complete]
