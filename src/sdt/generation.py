@@ -79,8 +79,10 @@ def vllm_chat(
         model=model_path, dtype="bfloat16", max_model_len=gen["max_model_len"], seed=config.seed
     )
     tokenizer = llm.get_tokenizer()
+    # Token ids, not text: the chat template already adds BOS, and vLLM would add a second one
+    # when tokenizing a string. The other backends also start from the template's own ids.
     prompts = [
-        tokenizer.apply_chat_template(conv, tokenize=False, add_generation_prompt=True)
+        {"prompt_token_ids": tokenizer.apply_chat_template(conv, add_generation_prompt=True)}
         for conv in conversations
     ]
     params = SamplingParams(
