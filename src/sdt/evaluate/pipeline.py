@@ -16,6 +16,8 @@ from sdt.schema import GenerationRecord, JudgeRecord, Kind, Label, ModelMetrics,
 
 log = logging.getLogger(__name__)
 
+INVALID_WARN = 0.05
+
 
 def generations_path(config: Config, name: str, split: Split = Split.TEST) -> Path:
     suffix = "" if split == Split.TEST else f".{split.value}"
@@ -82,7 +84,15 @@ def score(config: Config, name: str, judge_name: str, extras: dict | None = None
     for lang, value in extras.get("capability", {}).items():
         metrics.languages[lang].capability = value
     for lang, value in extras.get("task_score", {}).items():
-        metrics.languages[lang].task_score = value
+        metrics.languages[lang].task_score = value["f1"] if isinstance(value, dict) else value
+    if metrics.invalid_rate and metrics.invalid_rate > INVALID_WARN:
+        log.warning(
+            "%s/%s: judge could not label %.1f%% of replies; they are excluded from every rate. "
+            "Check runs/judgements for the raw outputs before reporting.",
+            name,
+            judge_name,
+            100 * metrics.invalid_rate,
+        )
 
     stats_file = generations_path(config, name).with_suffix(".stats.json")
     if stats_file.exists():

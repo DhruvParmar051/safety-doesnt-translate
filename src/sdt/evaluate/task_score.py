@@ -29,8 +29,12 @@ def auditkit_f1(prompts: list[str], replies: list[str], targets: list[str]) -> f
     return float(value) if isinstance(value, int | float) else None
 
 
-def task_score_by_language(config: Config, name: str) -> dict[str, float]:
-    """Mean F1 of the model's replies against the held-out task targets, per language."""
+def task_score_by_language(config: Config, name: str) -> dict[str, dict[str, float | None]]:
+    """Per language: our token F1 (`f1`, the reported score) and AuditKIT's f1_score (`auditkit`).
+
+    The reported number is always our own F1, so every model is scored by the same definition even
+    if AuditKIT is missing on one machine; AuditKIT's value is kept beside it as a cross-check.
+    """
     rows = list(read_jsonl(config.data_dir / "processed" / "task_eval.jsonl"))
     records = [
         PromptRecord(
@@ -43,11 +47,9 @@ def task_score_by_language(config: Config, name: str) -> dict[str, float]:
     for row, gen in zip(rows, generations, strict=True):
         by_lang[row["lang"]].append((row["prompt"], gen.response, row["target"]))
 
-    scores = {}
+    scores: dict[str, dict[str, float | None]] = {}
     for lang, items in by_lang.items():
         prompts, replies, targets = (list(x) for x in zip(*items, strict=True))
-        value = auditkit_f1(prompts, replies, targets)
-        if value is None:
-            value = sum(token_f1(r, t) for r, t in zip(replies, targets, strict=True)) / len(items)
-        scores[lang] = value
+        f1 = sum(token_f1(r, t) for r, t in zip(replies, targets, strict=True)) / len(items)
+        scores[lang] = {"f1": f1, "auditkit": auditkit_f1(prompts, replies, targets)}
     return scores
