@@ -6,6 +6,7 @@ Team: Dhruv Parmar, Falak.
 
 | Doc | What it holds |
 |---|---|
+| [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) | The whole project explained: goals, models, data, metrics, pipeline, correctness rules, status |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Who builds what, file contracts, milestone tasks |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Coding standard, commit rules, review rules |
 | [docs/MAC.md](docs/MAC.md) | Running the pipeline on a MacBook (MLX + MPS) before the H200 |
