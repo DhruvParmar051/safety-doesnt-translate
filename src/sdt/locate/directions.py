@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import random
 from collections import defaultdict
 
 from sdt.config import Config
@@ -66,14 +67,22 @@ def refusal_strength(diff, reference) -> list[float]:
 
 
 def calib_prompts(config: Config) -> dict[str, dict[Kind, list[str]]]:
-    """Calibration-split harmful and harmless prompts per language, capped per config."""
+    """A seeded random sample of calibration harmful and harmless prompts per language.
+
+    Sampling (not the first n in file order) mixes every source a language has, so directions
+    are not built from whichever dataset happens to come first.
+    """
     n = config["locate"]["calib_per_language"]
-    out: dict[str, dict[Kind, list[str]]] = defaultdict(lambda: defaultdict(list))
+    pools: dict[str, dict[Kind, list]] = defaultdict(lambda: defaultdict(list))
     for p in load_prompts(config):
         if p.split == Split.CALIB and p.kind in (Kind.HARMFUL, Kind.HARMLESS):
-            bucket = out[p.lang][p.kind]
-            if len(bucket) < n:
-                bucket.append(p.prompt)
+            pools[p.lang][p.kind].append(p)
+    out: dict[str, dict[Kind, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for lang, kinds in pools.items():
+        for kind, rows in kinds.items():
+            rows = sorted(rows, key=lambda r: r.id)
+            random.Random(f"{config.seed}-calib-{lang}-{kind.value}").shuffle(rows)
+            out[lang][kind] = [r.prompt for r in rows[:n]]
     return out
 
 
