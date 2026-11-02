@@ -23,6 +23,7 @@ Team: Dhruv Parmar, Falak.
 | 4 Repair | `sdt repair <method>` | SafeTune |
 | 5 Compress | `sdt compress uniform/mixed --model <m>` | CircuitKIT / bitsandbytes |
 | 6 Report | `sdt report all`, `sdt publish ...` | AuditKIT |
+| Demo | `python space/deploy.py <user>/<space> --left <drifted> --right <repaired>` | HF Space on ZeroGPU |
 
 Models: Tiny Aya Global (safe reference), Base (for the safety vector), Fire / Water / Earth (regional data-mix variants), our LoRA fine-tune (drifted). Judges: Aya Expanse 32B (primary), Llama Guard 3 (cross-check). Languages: English, Spanish, Russian, Arabic, Hindi, Filipino, Bengali, Swahili.
 
