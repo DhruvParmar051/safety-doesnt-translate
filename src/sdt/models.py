@@ -37,15 +37,60 @@ def load_tokenizer(path: str):
     return tok
 
 
+def default_device() -> str:
+    """'cuda' on the GPU box, 'mps' on Apple Silicon, else 'cpu'."""
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def release_memory() -> None:
+    """Returns cached accelerator memory so the next model (e.g. the judge) fits."""
+    import gc
+
+    import torch
+
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
 def load_hf_model(
-    path: str, device_map: str | None = "auto", dtype: str = "bfloat16", **kwargs: Any
+    path: str, device_map: str | dict | None = "auto", dtype: str = "bfloat16", **kwargs: Any
 ):
+    """Loads a causal LM; `device_map="auto"` means all GPUs on CUDA, the Mac GPU on Apple Silicon."""
     import torch
     from transformers import AutoModelForCausalLM
 
+    if device_map == "auto" and default_device() != "cuda":
+        device_map = {"": default_device()}
     return AutoModelForCausalLM.from_pretrained(
-        path, torch_dtype=getattr(torch, dtype), device_map=device_map, **kwargs
+        path, dtype=getattr(torch, dtype), device_map=device_map, **kwargs
     )
+
+
+def load_quantized(config: Config, spec: dict[str, Any]):
+    """A 4-bit model from a `sdt compress` spec: bitsandbytes on CUDA, optimum-quanto elsewhere."""
+    source = config.model_path(spec["source"])
+    if spec.get("backend", "bnb") == "bnb":
+        return load_hf_model(source, quantization_config=bnb_config(spec))
+    from optimum.quanto import freeze, qint4, quantize
+
+    model = load_hf_model(source)
+    quantize(model, weights=qint4, exclude=quanto_patterns(spec.get("skip_modules") or []))
+    freeze(model)
+    return model
+
+
+def quanto_patterns(skip_modules: list[str]) -> list[str]:
+    """optimum-quanto matches `exclude` with fnmatch, so a module prefix needs a trailing '*'."""
+    return [name if name == "lm_head" else f"{name}*" for name in skip_modules]
 
 
 def load_for_generation(config: Config, name: str) -> tuple[Any, Any, AbstractContextManager]:
@@ -57,9 +102,8 @@ def load_for_generation(config: Config, name: str) -> tuple[Any, Any, AbstractCo
     steer = spec_file(config, name, STEER_SPEC)
     if quant:
         spec = read_json(quant)
-        source = config.model_path(spec["source"])
-        model = load_hf_model(source, quantization_config=bnb_config(spec))
-        return model, load_tokenizer(source), contextlib.nullcontext()
+        model = load_quantized(config, spec)
+        return model, load_tokenizer(config.model_path(spec["source"])), contextlib.nullcontext()
     if steer:
         from sdt.repair.steering import build_steering_context
 

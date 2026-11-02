@@ -1,15 +1,15 @@
-"""Primary judge: Aya Expanse 32B (Cohere), served with vLLM."""
+"""Primary judge: Aya Expanse (Cohere); 32B on the GPU box, 8B in the Mac profile."""
 
 from __future__ import annotations
 
 from sdt.config import Config
-from sdt.generation import vllm_chat
+from sdt.generation import chat
 from sdt.judge.rubric import judge_messages, parse_label
 from sdt.schema import GenerationRecord, JudgeRecord
 
 
 def judge_with_aya(config: Config, rows: list[GenerationRecord]) -> list[JudgeRecord]:
-    outputs = vllm_chat(
+    outputs = chat(
         config,
         config.model_path("judge_primary"),
         [judge_messages(r.prompt, r.response) for r in rows],

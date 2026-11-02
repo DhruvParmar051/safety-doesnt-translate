@@ -6,7 +6,7 @@ import logging
 from dataclasses import replace
 
 from sdt.config import Config
-from sdt.generation import vllm_chat
+from sdt.generation import chat
 from sdt.schema import PromptRecord
 
 log = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ def translate_xstest(
     jobs = [(rec, lang) for lang in targets for rec in english]
     model = config.model_path("translator")
 
-    forward = vllm_chat(
+    forward = chat(
         config,
         model,
         [
@@ -41,7 +41,7 @@ def translate_xstest(
         replace(rec, id=f"{rec.source_id}-{lang}", lang=lang, prompt=text.strip(), native=False)
         for (rec, lang), text in zip(jobs, forward, strict=True)
     ]
-    backward = vllm_chat(
+    backward = chat(
         config,
         model,
         [

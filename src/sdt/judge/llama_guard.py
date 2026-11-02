@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sdt.config import Config
-from sdt.generation import vllm_chat
+from sdt.generation import chat
 from sdt.judge.rubric import parse_llama_guard
 from sdt.schema import GenerationRecord, JudgeRecord
 
@@ -17,9 +17,7 @@ def judge_with_llama_guard(config: Config, rows: list[GenerationRecord]) -> list
         ]
         for r in rows
     ]
-    outputs = vllm_chat(
-        config, config.model_path("judge_secondary"), conversations, max_new_tokens=16
-    )
+    outputs = chat(config, config.model_path("judge_secondary"), conversations, max_new_tokens=16)
     return [
         JudgeRecord(r.id, r.model, "llama_guard", r.lang, r.kind, parse_llama_guard(out), raw=out)
         for r, out in zip(rows, outputs, strict=True)

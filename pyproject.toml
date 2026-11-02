@@ -23,12 +23,22 @@ data = [
 # Generation, fine-tuning, repair and quantization (CUDA box).
 gpu = [
   "torch>=2.3",
-  "transformers>=4.48",
+  "transformers>=4.56",
   "accelerate>=0.30",
   "peft>=0.11",
   "trl>=0.9",
   "vllm>=0.6",
   "bitsandbytes>=0.43",
+]
+# Apple Silicon: MLX runs generation; PyTorch on MPS runs training, hooks and 4-bit (quanto).
+mac = [
+  "mlx-lm>=0.30",
+  "torch>=2.3",
+  "transformers>=4.56",
+  "accelerate>=0.30",
+  "peft>=0.11",
+  "trl>=0.12",
+  "optimum-quanto>=0.2",
 ]
 safety = ["safetune"]
 interp = ["circuitkit"]
