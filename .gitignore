@@ -1,0 +1,30 @@
+# Data, checkpoints and run outputs live on Hugging Face, not in git.
+/data/
+/runs/
+/wandb/
+*.safetensors
+*.bin
+*.pt
+*.gguf
+
+# Contains harmful prompts; uploaded to the Space directly, never committed.
+space/space_results.jsonl
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Notebooks and editors
+.ipynb_checkpoints/
+.DS_Store
+.vscode/
+.idea/
+
+# Secrets
+.env
