@@ -7,6 +7,7 @@ import random
 
 from sdt.config import Config
 from sdt.data.sources import stable_bucket
+from sdt.data.text_checks import normalize_for_dedup
 from sdt.io import write_jsonl
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ def build_task_data(config: Config) -> tuple[int, int]:
     spec = config["task"]
     by_code = {code: lang for lang, code in spec["language_codes"].items()}
     pools: dict[str, list[dict]] = {lang: [] for lang in config.languages}
+    seen: set[tuple[str, str]] = set()
     for row in load_dataset(spec["dataset"], split="train"):
         lang = by_code.get(row["language_code"])
         # Buckets 0-9 are reserved for harmless calibration prompts (sources.load_harmless).
@@ -26,6 +28,12 @@ def build_task_data(config: Config) -> tuple[int, int]:
             continue
         if len(row["targets"]) > spec["max_target_chars"] or not row["targets"].strip():
             continue
+        # The same instruction can appear several times; keep one, so no eval prompt is also
+        # a training prompt (that would inflate the task score).
+        key = (lang, normalize_for_dedup(row["inputs"]))
+        if key in seen:
+            continue
+        seen.add(key)
         pools[lang].append(
             {"lang": lang, "prompt": row["inputs"].strip(), "target": row["targets"].strip()}
         )
