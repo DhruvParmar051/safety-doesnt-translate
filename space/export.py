@@ -9,6 +9,8 @@ import argparse
 import random
 from collections import defaultdict
 
+from display import EXCERPT_CHARS
+
 from sdt.config import load_config
 from sdt.evaluate.pipeline import (
     generations_path,
@@ -36,7 +38,11 @@ def main() -> None:
             row = entries.setdefault(
                 g.id, {"id": g.id, "lang": g.lang, "prompt": g.prompt, "kind": g.kind.value}
             )
-            row[side] = {"response": g.response, "label": labels.get(g.id, "invalid")}
+            label = labels.get(g.id, "invalid")
+            # The file is uploaded to the Space repo, where anyone can download it: never store more
+            # of a harmful or unlabelled reply than the excerpt the app would show.
+            response = g.response if label in ("refusal", "safe") else g.response[:EXCERPT_CHARS]
+            row[side] = {"response": response, "label": label}
 
     by_lang: dict[str, list[dict]] = defaultdict(list)
     for row in entries.values():
