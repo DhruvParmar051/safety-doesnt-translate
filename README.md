@@ -8,6 +8,7 @@ Team: Dhruv Parmar, Falak.
 |---|---|
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Who builds what, file contracts, milestone tasks |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Coding standard, commit rules, review rules |
+| [docs/MAC.md](docs/MAC.md) | Running the pipeline on a MacBook (MLX + MPS) before the H200 |
 | `configs/project.yaml` | Every model, language, path and hyperparameter |
 | `configs/repair.yaml` | Repair methods and their sweeps |
 
