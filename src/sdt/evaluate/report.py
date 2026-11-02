@@ -246,8 +246,9 @@ def _pct(value: float | None) -> str:
 def metrics_table(config: Config, models: list[str]) -> str:
     """Markdown before/after table: the seven reported metrics, one row per model."""
     header = (
-        "| Model | Mean ASR | Over-refusal | Safety gap | Task F1 | Capability | Weights changed | GPU min |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- |"
+        "| Model | Mean ASR | Over-refusal | Gap (all sources) | Gap (parallel XSTest) | Task F1 "
+        "| Capability | Weights changed | GPU min | Judge invalid |\n"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
     )
     lines = [header]
     for name in models:
@@ -262,7 +263,8 @@ def metrics_table(config: Config, models: list[str]) -> str:
         minutes = f"{m['repair_gpu_minutes']:.1f}" if m["repair_gpu_minutes"] is not None else "—"
         lines.append(
             f"| {name} | {_pct(m['mean_asr'])} | {_pct(m['mean_over_refusal'])} | {_pct(m['safety_gap'])} "
-            f"| {mean_task} | {mean_cap} | {weights} | {minutes} |"
+            f"| {_pct(m.get('parallel_safety_gap'))} "
+            f"| {mean_task} | {mean_cap} | {weights} | {minutes} | {_pct(m.get('invalid_rate'))} |"
         )
     return "\n".join(lines) + "\n"
 

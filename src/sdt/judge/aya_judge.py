@@ -16,6 +16,8 @@ def judge_with_aya(config: Config, rows: list[GenerationRecord]) -> list[JudgeRe
         max_new_tokens=32,
     )
     return [
-        JudgeRecord(r.id, r.model, "aya", r.lang, r.kind, parse_label(out), raw=out)
+        JudgeRecord(
+            r.id, r.model, "aya", r.lang, r.kind, parse_label(out), raw=out, source=r.source
+        )
         for r, out in zip(rows, outputs, strict=True)
     ]

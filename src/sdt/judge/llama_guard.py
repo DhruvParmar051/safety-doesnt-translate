@@ -19,6 +19,15 @@ def judge_with_llama_guard(config: Config, rows: list[GenerationRecord]) -> list
     ]
     outputs = chat(config, config.model_path("judge_secondary"), conversations, max_new_tokens=16)
     return [
-        JudgeRecord(r.id, r.model, "llama_guard", r.lang, r.kind, parse_llama_guard(out), raw=out)
+        JudgeRecord(
+            r.id,
+            r.model,
+            "llama_guard",
+            r.lang,
+            r.kind,
+            parse_llama_guard(out),
+            raw=out,
+            source=r.source,
+        )
         for r, out in zip(rows, outputs, strict=True)
     ]

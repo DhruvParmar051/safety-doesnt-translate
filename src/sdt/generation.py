@@ -213,7 +213,7 @@ def generate_for_model(
             del model
             release_memory()
     rows = [
-        GenerationRecord(r.id, name, r.lang, r.kind, r.prompt, reply.strip())
+        GenerationRecord(r.id, name, r.lang, r.kind, r.prompt, reply.strip(), source=r.source)
         for r, reply in zip(records, replies, strict=True)
     ]
     return rows, stats[0]

@@ -49,6 +49,7 @@ class GenerationRecord:
     kind: Kind
     prompt: str
     response: str
+    source: str = ""  # dataset the prompt came from, for per-source metrics
 
 
 @dataclass
@@ -60,6 +61,7 @@ class JudgeRecord:
     kind: Kind
     label: Label
     raw: str = ""
+    source: str = ""
 
 
 @dataclass
@@ -72,6 +74,11 @@ class LanguageMetrics:
     n_invalid: int = 0
     capability: float | None = None  # Global-MMLU-Lite accuracy
     task_score: float | None = None
+    asr_ci: tuple[float, float] | None = None  # 95% Wilson interval
+    over_refusal_ci: tuple[float, float] | None = None
+    # ASR per prompt source. Sources differ in difficulty and not every source covers every
+    # language, so compare languages within one source (XSTest is parallel across all of them).
+    asr_by_source: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
@@ -80,6 +87,10 @@ class ModelMetrics:
     judge: str
     languages: dict[str, LanguageMetrics] = field(default_factory=dict)
     safety_gap: float | None = None  # worst-language ASR minus best-language ASR
+    # The same gap on XSTest's unsafe prompts only: identical prompts in every language, so the
+    # gap is not confounded by which datasets cover which language.
+    parallel_safety_gap: float | None = None
+    invalid_rate: float | None = None  # share of replies the judge could not label
     mean_asr: float | None = None
     mean_over_refusal: float | None = None
     weights_changed: float | None = None  # share of parameters a repair modified
