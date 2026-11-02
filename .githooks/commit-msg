@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Rejects commit messages that credit an AI assistant (see CONTRIBUTING.md).
+# Subject words such as "AI safety" or "LLM judge" are allowed; only attribution is blocked.
+set -euo pipefail
+
+msg_file="$1"
+# Ignore git's comment lines (shown in the editor, never committed).
+msg="$(grep -v '^#' "$msg_file" || true)"
+
+patterns=(
+  'claude'
+  'anthropic'
+  'chatgpt'
+  'openai'
+  'copilot'
+  'gemini'
+  'co-authored-by:.*(noreply@anthropic|bot|\bai\b|assistant|gpt)'
+  'generated (with|by)'
+  '\bai[- ](generated|assisted|written)\b'
+  'written (with|by) (an )?(ai|llm|assistant)'
+)
+
+for pattern in "${patterns[@]}"; do
+  if printf '%s' "$msg" | grep -Eiq -- "$pattern"; then
+    echo "commit-msg: rejected. The message matches '$pattern'." >&2
+    echo "Commit messages must not credit an AI assistant (CONTRIBUTING.md)." >&2
+    exit 1
+  fi
+done
