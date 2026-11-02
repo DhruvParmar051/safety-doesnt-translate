@@ -1,59 +1,148 @@
-"""HF Space: pick a language and a prompt, compare the drifted and repaired replies side by side.
+"""HF Space on ZeroGPU: ask the drifted and the repaired Tiny Aya the same prompt, live, side by side.
 
-Reads precomputed results (no model is loaded), from a JSONL produced by `space/export.py`:
-{"id", "lang", "prompt", "<model>": {"response", "label"}, ...}. Replies judged harmful are
-redacted to a short excerpt.
+Every reply is labelled by the Aya Expanse judge before it is shown; harmful or unlabelled replies are
+cut to a short excerpt (display.py). A second tab replays curated examples from `space/export.py`
+when `space_results.jsonl` is present.
+
+Configuration (Space variables; private or gated models also need an HF_TOKEN secret):
+  SDT_LEFT_MODEL   drifted model repo   SDT_RIGHT_MODEL  repaired model repo
+  SDT_JUDGE_MODEL  judge repo (default CohereLabs/aya-expanse-8b)
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import gradio as gr
+import spaces  # must be imported before torch initialises CUDA on ZeroGPU
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-RESULTS = Path(os.environ.get("SDT_RESULTS", "space_results.jsonl"))
-LEFT, RIGHT = os.environ.get("SDT_LEFT", "drifted"), os.environ.get("SDT_RIGHT", "repaired")
-EXCERPT = 120
+HERE = Path(__file__).resolve().parent
+for candidate in (HERE, HERE.parent / "src"):  # Space layout, or a local checkout
+    if (candidate / "sdt").exists():
+        sys.path.insert(0, str(candidate))
 
-rows = [
-    json.loads(line) for line in RESULTS.read_text(encoding="utf-8").splitlines() if line.strip()
-]
-languages = sorted({r["lang"] for r in rows})
+from display import clean_prompt, present  # noqa: E402
+
+from sdt.judge.rubric import judge_messages, parse_label  # noqa: E402
+
+LEFT_MODEL = os.environ.get("SDT_LEFT_MODEL", "CohereLabs/tiny-aya-global")
+RIGHT_MODEL = os.environ.get("SDT_RIGHT_MODEL", "CohereLabs/tiny-aya-global")
+JUDGE_MODEL = os.environ.get("SDT_JUDGE_MODEL", "CohereLabs/aya-expanse-8b")
+LEFT_NAME = os.environ.get("SDT_LEFT_NAME", "Drifted (after harmless fine-tune)")
+RIGHT_NAME = os.environ.get("SDT_RIGHT_NAME", "Repaired (weight-space, no retraining)")
+MAX_NEW_TOKENS = int(os.environ.get("SDT_MAX_NEW_TOKENS", "256"))
+GPU_SECONDS = int(os.environ.get("SDT_GPU_SECONDS", "90"))
+EXAMPLES = HERE / "space_results.jsonl"
+
+if torch.cuda.is_available():  # true on ZeroGPU, where the GPU is attached per call
+    DEVICE = "cuda"
+elif torch.backends.mps.is_available():
+    DEVICE = "mps"
+else:
+    DEVICE = "cpu"
 
 
-def show(entry: dict) -> str:
-    label, text = entry["label"], entry["response"]
-    if label == "harmful":
-        text = text[:EXCERPT] + " … [redacted: judged harmful]"
-    return f"**Judge label: {label}**\n\n{text}"
+def _load(repo: str):
+    tok = AutoTokenizer.from_pretrained(repo)
+    model = AutoModelForCausalLM.from_pretrained(repo, dtype=torch.bfloat16).to(DEVICE)
+    return model.eval(), tok
 
 
-def prompts_for(lang: str):
-    choices = [r["prompt"] for r in rows if r["lang"] == lang]
+# Loaded once at start-up; on ZeroGPU the weights move to the GPU only inside @spaces.GPU calls.
+left_model, left_tok = _load(LEFT_MODEL)
+right_model, right_tok = (left_model, left_tok) if RIGHT_MODEL == LEFT_MODEL else _load(RIGHT_MODEL)
+judge_model, judge_tok = _load(JUDGE_MODEL)
+
+
+def _reply(model, tok, messages: list[dict[str, str]], max_new_tokens: int) -> str:
+    inputs = tok.apply_chat_template(
+        messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
+    ).to(model.device)
+    with torch.no_grad():
+        out = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+    return tok.decode(out[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+
+
+@spaces.GPU(duration=GPU_SECONDS)
+def compare(prompt: str) -> tuple[str, str]:
+    """Both models answer greedily; the judge labels each reply before anything is shown."""
+    try:
+        prompt = clean_prompt(prompt)
+    except ValueError as err:
+        raise gr.Error(str(err)) from err
+    shown = []
+    for model, tok in ((left_model, left_tok), (right_model, right_tok)):
+        reply = _reply(model, tok, [{"role": "user", "content": prompt}], MAX_NEW_TOKENS)
+        verdict = _reply(judge_model, judge_tok, judge_messages(prompt, reply), 32)
+        shown.append(present(parse_label(verdict).value, reply))
+    return shown[0], shown[1]
+
+
+def _side_by_side() -> tuple[gr.Markdown, gr.Markdown]:
+    """Two labelled columns; gr.Markdown does not display its own label."""
+    with gr.Row():
+        with gr.Column():
+            gr.Markdown(f"### {LEFT_NAME}")
+            left = gr.Markdown(container=True)
+        with gr.Column():
+            gr.Markdown(f"### {RIGHT_NAME}")
+            right = gr.Markdown(container=True)
+    return left, right
+
+
+def _examples() -> list[dict]:
+    if not EXAMPLES.exists():
+        return []
+    return [
+        json.loads(line)
+        for line in EXAMPLES.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+EXAMPLE_ROWS = _examples()
+LANGUAGES = sorted({r["lang"] for r in EXAMPLE_ROWS})
+
+
+def example_prompts(lang: str):
+    choices = [r["prompt"] for r in EXAMPLE_ROWS if r["lang"] == lang]
     return gr.update(choices=choices, value=choices[0] if choices else None)
 
 
-def compare(lang: str, prompt: str):
-    for r in rows:
+def show_example(lang: str, prompt: str) -> tuple[str, str]:
+    for r in EXAMPLE_ROWS:
         if r["lang"] == lang and r["prompt"] == prompt:
-            return show(r[LEFT]), show(r[RIGHT])
+            return (
+                present(r["drifted"]["label"], r["drifted"]["response"]),
+                present(r["repaired"]["label"], r["repaired"]["response"]),
+            )
     return "", ""
 
 
 with gr.Blocks(title="Safety Doesn't Translate") as demo:
     gr.Markdown(
-        "# Safety Doesn't Translate\nTiny Aya after a harmless fine-tune, before and after weight-space repair."
+        "# Safety Doesn't Translate\n"
+        "Tiny Aya after a harmless fine-tune (left) and after a weight-space repair with no "
+        "retraining (right). An Aya Expanse judge labels every reply; replies judged harmful are hidden."
     )
-    lang = gr.Dropdown(languages, label="Language", value=languages[0] if languages else None)
-    prompt = gr.Dropdown([], label="Prompt")
-    with gr.Row():
-        left = gr.Markdown(label=LEFT)
-        right = gr.Markdown(label=RIGHT)
-    lang.change(prompts_for, lang, prompt)
-    prompt.change(compare, [lang, prompt], [left, right])
-    demo.load(prompts_for, lang, prompt)
+    with gr.Tab("Ask both models"):
+        prompt = gr.Textbox(label="Prompt, in any language", lines=3, max_length=1000)
+        ask = gr.Button("Compare", variant="primary")
+        left_out, right_out = _side_by_side()
+        ask.click(compare, prompt, [left_out, right_out], concurrency_limit=1)
+    if EXAMPLE_ROWS:
+        with gr.Tab("Examples from our test set"):
+            lang = gr.Dropdown(LANGUAGES, label="Language", value=LANGUAGES[0])
+            example = gr.Dropdown([], label="Prompt")
+            ex_left, ex_right = _side_by_side()
+            lang.change(example_prompts, lang, example)
+            example.change(show_example, [lang, example], [ex_left, ex_right])
+            demo.load(example_prompts, lang, example)
 
 if __name__ == "__main__":
     demo.launch()
