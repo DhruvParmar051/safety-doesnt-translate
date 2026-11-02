@@ -1,4 +1,6 @@
-"""Uniform 4-bit vs mixed precision (located components kept in bf16), via bitsandbytes.
+"""Uniform 4-bit vs mixed precision (located components kept in bf16).
+
+bitsandbytes on CUDA, optimum-quanto (int4 weights) elsewhere, e.g. the Mac.
 
 A compressed model is a spec (`quantization.json`) applied at load time, so no 4-bit weights are
 saved; `size.json` records the measured memory footprint.
@@ -10,7 +12,7 @@ import logging
 
 from sdt.config import Config
 from sdt.io import read_json, write_json
-from sdt.models import QUANT_SPEC, bnb_config, load_hf_model
+from sdt.models import QUANT_SPEC, default_device, load_hf_model, load_quantized
 
 log = logging.getLogger(__name__)
 
@@ -30,14 +32,19 @@ def skip_modules(components: list[dict]) -> list[str]:
     return [*names, "lm_head"]
 
 
+def quant_backend(config: Config) -> str:
+    """'bnb' or 'quanto'; `auto` picks bitsandbytes only where CUDA exists."""
+    choice = config["compress"].get("backend", "auto")
+    if choice == "auto":
+        return "bnb" if default_device() == "cuda" else "quanto"
+    return choice
+
+
 def measure_size(config: Config, name: str) -> float:
     """Loads the model as `sdt generate` would and records its memory footprint in GB."""
     spec_path = config.runs_dir / "models" / name / QUANT_SPEC
     if spec_path.exists():
-        spec = read_json(spec_path)
-        model = load_hf_model(
-            config.model_path(spec["source"]), quantization_config=bnb_config(spec)
-        )
+        model = load_quantized(config, read_json(spec_path))
     else:
         model = load_hf_model(config.model_path(name))
     size_gb = model.get_memory_footprint() / 1e9
@@ -49,7 +56,9 @@ def measure_size(config: Config, name: str) -> float:
 def compress(config: Config, source: str, mode: str) -> str:
     """mode 'uniform' quantizes everything; 'mixed' protects the top located components."""
     spec_cfg = config["compress"]
-    skip: list[str] = []
+    skip: list[str] = [
+        "lm_head"
+    ]  # both modes keep the output head, as bitsandbytes does by default
     if mode == "mixed":
         components = read_json(config.runs_dir / "locate" / "components.json")
         skip = skip_modules(components[: spec_cfg["protect_top_components"]])
@@ -58,7 +67,12 @@ def compress(config: Config, source: str, mode: str) -> str:
     name = f"{source}-4bit-{mode}"
     write_json(
         config.runs_dir / "models" / name / QUANT_SPEC,
-        {"source": source, "quant_type": spec_cfg["bnb_quant_type"], "skip_modules": skip},
+        {
+            "source": source,
+            "backend": quant_backend(config),
+            "quant_type": spec_cfg["bnb_quant_type"],
+            "skip_modules": skip,
+        },
     )
     measure_size(config, name)
     return name

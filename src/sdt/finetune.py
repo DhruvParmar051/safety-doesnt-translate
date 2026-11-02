@@ -16,6 +16,7 @@ log = logging.getLogger(__name__)
 
 def _sft_config(config: Config, out_dir: Path):
     """SFTConfig across TRL versions (the max-length field was renamed in 0.19)."""
+    import torch
     from trl import SFTConfig
 
     spec = config["finetune"]
@@ -29,7 +30,9 @@ def _sft_config(config: Config, out_dir: Path):
         "warmup_ratio": 0.03,
         "logging_steps": 10,
         "save_strategy": "no",
-        "bf16": True,
+        # Mixed precision needs CUDA; on the Mac the LoRA trains in full precision on MPS.
+        "bf16": torch.cuda.is_available(),
+        "gradient_checkpointing": bool(spec.get("gradient_checkpointing", False)),
         "seed": config.seed,
         "report_to": "none",
     }
@@ -39,7 +42,7 @@ def _sft_config(config: Config, out_dir: Path):
 
 
 def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> float:
-    """Trains LoRA on chat `messages`, saves the adapter and the merged model; returns GPU minutes."""
+    """Trains LoRA on chat `messages`, saves the adapter and the merged model; returns wall-clock minutes."""
     from datasets import Dataset
     from peft import LoraConfig
     from trl import SFTTrainer
@@ -50,7 +53,11 @@ def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> 
 
     tokenizer = load_tokenizer(source)
     tokenizer.padding_side = "right"  # training pads on the right
-    model = load_hf_model(source, device_map="auto")
+    import torch
+
+    # bf16 weights train fine on CUDA; elsewhere float32 is the stable choice (3.35B fits in 48 GB).
+    dtype = "bfloat16" if torch.cuda.is_available() else "float32"
+    model = load_hf_model(source, device_map="auto", dtype=dtype)
     peft_config = LoraConfig(
         r=spec["lora_r"],
         lora_alpha=spec["lora_alpha"],
