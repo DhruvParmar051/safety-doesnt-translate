@@ -35,10 +35,22 @@ def _sft_config(config: Config, out_dir: Path):
         "gradient_checkpointing": bool(spec.get("gradient_checkpointing", False)),
         "seed": config.seed,
         "report_to": "none",
+        "completion_only_loss": True,
     }
     names = {f.name for f in dataclasses.fields(SFTConfig)}
     kwargs["max_length" if "max_length" in names else "max_seq_length"] = spec["max_seq_len"]
     return SFTConfig(**kwargs)
+
+
+def to_prompt_completion(messages: list[dict[str, str]]) -> dict[str, list[dict[str, str]]]:
+    """Conversational prompt/completion row: TRL then puts the loss on the answer only.
+
+    Training on the user turn too would teach the model to write prompts, including harmful ones
+    in the safety fine-tune baseline.
+    """
+    if not messages or messages[-1]["role"] != "assistant":
+        raise ValueError("Each training row must end with the assistant's reply")
+    return {"prompt": messages[:-1], "completion": messages[-1:]}
 
 
 def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> float:
@@ -65,7 +77,7 @@ def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> 
         target_modules=spec["target_modules"],
         task_type="CAUSAL_LM",
     )
-    dataset = Dataset.from_list([{"messages": r["messages"]} for r in rows])
+    dataset = Dataset.from_list([to_prompt_completion(r["messages"]) for r in rows])
     trainer = SFTTrainer(
         model=model,
         args=_sft_config(config, out_dir),
