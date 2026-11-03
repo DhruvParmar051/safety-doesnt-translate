@@ -12,10 +12,11 @@ from sdt.io import read_jsonl, write_json
 from sdt.models import load_hf_model, load_tokenizer
 
 log = logging.getLogger(__name__)
+WARMUP_RATIO = 0.03  # share of training steps spent warming up the learning rate
 
 
 def _sft_config(config: Config, out_dir: Path):
-    """SFTConfig across TRL versions (the max-length field was renamed in 0.19)."""
+    """SFTConfig across TRL versions (max-length and warmup fields were renamed)."""
     import torch
     from trl import SFTConfig
 
@@ -27,7 +28,6 @@ def _sft_config(config: Config, out_dir: Path):
         "gradient_accumulation_steps": spec["grad_accum"],
         "learning_rate": spec["learning_rate"],
         "lr_scheduler_type": "cosine",
-        "warmup_ratio": 0.03,
         "logging_steps": 10,
         "save_strategy": "no",
         # Mixed precision needs CUDA; on the Mac the LoRA trains in full precision on MPS.
@@ -39,6 +39,8 @@ def _sft_config(config: Config, out_dir: Path):
     }
     names = {f.name for f in dataclasses.fields(SFTConfig)}
     kwargs["max_length" if "max_length" in names else "max_seq_length"] = spec["max_seq_len"]
+    # transformers 5 dropped warmup_ratio; its warmup_steps takes a float below 1 as a ratio.
+    kwargs["warmup_ratio" if "warmup_ratio" in names else "warmup_steps"] = WARMUP_RATIO
     return SFTConfig(**kwargs)
 
 
