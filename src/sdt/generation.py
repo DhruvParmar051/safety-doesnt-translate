@@ -64,6 +64,13 @@ def chat(
         release_memory()
 
 
+def chat_token_ids(tokenizer, conversation: Conversation) -> list[int]:
+    """The chat template's token ids. transformers 5 returns a dict unless asked for a list."""
+    return list(
+        tokenizer.apply_chat_template(conversation, add_generation_prompt=True, return_dict=False)
+    )
+
+
 def vllm_chat(
     config: Config,
     model_path: str,
@@ -81,10 +88,7 @@ def vllm_chat(
     tokenizer = llm.get_tokenizer()
     # Token ids, not text: the chat template already adds BOS, and vLLM would add a second one
     # when tokenizing a string. The other backends also start from the template's own ids.
-    prompts = [
-        {"prompt_token_ids": tokenizer.apply_chat_template(conv, add_generation_prompt=True)}
-        for conv in conversations
-    ]
+    prompts = [{"prompt_token_ids": chat_token_ids(tokenizer, conv)} for conv in conversations]
     params = SamplingParams(
         temperature=gen["temperature"],
         max_tokens=max_new_tokens or gen["max_new_tokens"],
@@ -96,6 +100,11 @@ def vllm_chat(
     if stats is not None:
         n_tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
         stats.append(GenerationStats(len(prompts), n_tokens, seconds))
+    # The engine runs in a child process that `del` does not always stop; on a small GPU its
+    # leftover memory would stop the next engine (e.g. the judge) from starting.
+    engine_core = getattr(llm.llm_engine, "engine_core", None)
+    if hasattr(engine_core, "shutdown"):
+        engine_core.shutdown()
     del llm
     release_memory()
     return [o.outputs[0].text for o in outputs]
@@ -162,9 +171,7 @@ def mlx_chat(
 
     gen = config["generation"]
     model, tokenizer = load(model_path)
-    prompts = [
-        tokenizer.apply_chat_template(conv, add_generation_prompt=True) for conv in conversations
-    ]
+    prompts = [chat_token_ids(tokenizer, conv) for conv in conversations]
     order = sorted(range(len(prompts)), key=lambda i: len(prompts[i]), reverse=True)
     replies: list[str] = [""] * len(prompts)
     n_tokens, start = 0, time.perf_counter()
