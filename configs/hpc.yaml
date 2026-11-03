@@ -1,0 +1,11 @@
+# Profile for the DAU HPC cluster: `sdt --profile hpc ...` or SDT_PROFILE=hpc. Job scripts: scripts/hpc/.
+# Same models and data scale as the H200 plan. Most steps run on a 24 GB MIG slice of an RTX PRO 6000
+# (rtx6000-mig, gpu:1g.24gb); the Aya Expanse 32B judge (~64 GB) runs on h200-fullgpu
+# (scripts/hpc/submit_h200.sh).
+
+finetune:
+  # Same effective batch (16) as the H200 run; smaller micro-batches keep the full-vocabulary
+  # logits and activations inside 24 GB.
+  batch_size: 2
+  grad_accum: 8
+  gradient_checkpointing: true

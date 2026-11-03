@@ -80,7 +80,9 @@ def score(config: Config, name: str, judge_name: str, extras: dict | None = None
     """Safety metrics from saved labels, plus capability/task/size/repair info when available."""
     labels = load_judgements(judgements_path(config, name, judge_name))
     metrics = model_metrics(name, judge_name, labels, config.languages)
-    extras = extras or {}
+    if extras is None:  # `sdt metrics` after a split run: reuse what `evaluate` measured
+        saved = config.runs_dir / "metrics" / name / "extras.json"
+        extras = read_json(saved) if saved.exists() else {}
     for lang, value in extras.get("capability", {}).items():
         metrics.languages[lang].capability = value
     for lang, value in extras.get("task_score", {}).items():
@@ -116,12 +118,17 @@ def evaluate(
     backend: str | None = None,
     with_capability: bool = True,
     with_task: bool = True,
+    judges: list[str] | None = None,
 ) -> ModelMetrics:
-    """The full evaluation of one model; returns the primary judge's metrics."""
+    """The full evaluation of one model; returns the first judge's metrics.
+
+    `judges` defaults to both. A GPU too small for the primary judge runs the secondary only;
+    `sdt judge <model> --judge <primary>` and `sdt metrics <model>` finish it on a larger GPU.
+    """
     run_dir = config.runs_dir / "metrics" / name
-    save_run_config(config, run_dir, step="evaluate", model=name, backend=backend)
+    save_run_config(config, run_dir, step="evaluate", model=name, backend=backend, judges=judges)
     generate(config, name, backend=backend)
-    judges = [config["judge"]["primary"], config["judge"]["secondary"]]
+    judges = judges or [config["judge"]["primary"], config["judge"]["secondary"]]
     for judge_name in judges:
         judge(config, name, judge_name)
 
@@ -136,7 +143,6 @@ def evaluate(
         extras["task_score"] = task_score_by_language(config, name)
     write_json(run_dir / "extras.json", extras)
 
-    result = score(config, name, judges[0], extras)
-    score(config, name, judges[1], extras)
+    result, *_ = [score(config, name, judge_name, extras) for judge_name in judges]
     log.info("%s: mean ASR %s, gap %s", name, result.mean_asr, result.safety_gap)
     return result

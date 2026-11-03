@@ -58,7 +58,7 @@ def _metrics(cfg, args) -> None:
 def _evaluate(cfg, args) -> None:
     from sdt.evaluate.pipeline import evaluate
 
-    evaluate(cfg, args.model, args.backend, not args.no_capability, not args.no_task)
+    evaluate(cfg, args.model, args.backend, not args.no_capability, not args.no_task, args.judge)
 
 
 def _hand_labels(cfg, args) -> None:
@@ -254,6 +254,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--backend", choices=["vllm", "mlx", "hf"])
     s.add_argument("--no-capability", action="store_true")
     s.add_argument("--no-task", action="store_true")
+    s.add_argument("--judge", action="append", choices=["aya", "llama_guard"], help="default: both")
     s.set_defaults(fn=_evaluate)
 
     s = sub.add_parser("hand-labels", help="hand-label sheet and judge agreement")
