@@ -133,14 +133,16 @@ def evaluate(
         judge(config, name, judge_name)
 
     extras: dict = {}
-    if with_capability:
-        from sdt.evaluate.capability import capability_by_language
-
-        extras["capability"] = capability_by_language(config, name)
+    # Task score (a vLLM engine) runs before capability (a transformers model): an engine started
+    # after a transformers model in the same process can find too little free memory on a slice.
     if with_task:
         from sdt.evaluate.task_score import task_score_by_language
 
         extras["task_score"] = task_score_by_language(config, name)
+    if with_capability:
+        from sdt.evaluate.capability import capability_by_language
+
+        extras["capability"] = capability_by_language(config, name)
     write_json(run_dir / "extras.json", extras)
 
     result, *_ = [score(config, name, judge_name, extras) for judge_name in judges]

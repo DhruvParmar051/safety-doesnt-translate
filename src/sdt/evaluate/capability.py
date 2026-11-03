@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 
 from sdt.config import Config
-from sdt.models import chat_prompt, load_for_generation
+from sdt.models import chat_prompt, load_for_generation, release_memory
 
 log = logging.getLogger(__name__)
 
@@ -48,28 +48,33 @@ def capability_by_language(config: Config, name: str) -> dict[str, float]:
     batch_size = config["generation"]["batch_size"]
 
     scores: dict[str, float] = {}
-    with context, torch.no_grad():
-        for lang in config.languages:
-            if lang not in available:
-                continue
-            rows = list(load_dataset("parquet", data_files=available[lang], split="train"))
-            random.Random(f"{config.seed}-mmlu-{lang}").shuffle(rows)
-            rows = rows[: spec["per_language"]]
-            correct = 0
-            for i in range(0, len(rows), batch_size):
-                chunk = rows[i : i + batch_size]
-                texts = [chat_prompt(tokenizer, mmlu_question(r)) for r in chunk]
-                inputs = tokenizer(
-                    texts, return_tensors="pt", padding=True, add_special_tokens=False
-                )
-                # Only the last position is read; full logits over Tiny Aya's 262k-token vocabulary
-                # for every position need ~15 GB at batch 32.
-                out = model(**inputs.to(model.device), logits_to_keep=1)
-                logits = out.logits[:, -1, letter_ids]
-                picks = logits.argmax(dim=-1).tolist()
-                correct += sum(
-                    LETTERS[p] == r["answer"].strip() for p, r in zip(picks, chunk, strict=True)
-                )
-            scores[lang] = correct / len(rows)
-            log.info("%s capability %s: %.3f", name, lang, scores[lang])
+    try:
+        with context, torch.no_grad():
+            for lang in config.languages:
+                if lang not in available:
+                    continue
+                rows = list(load_dataset("parquet", data_files=available[lang], split="train"))
+                random.Random(f"{config.seed}-mmlu-{lang}").shuffle(rows)
+                rows = rows[: spec["per_language"]]
+                correct = 0
+                for i in range(0, len(rows), batch_size):
+                    chunk = rows[i : i + batch_size]
+                    texts = [chat_prompt(tokenizer, mmlu_question(r)) for r in chunk]
+                    inputs = tokenizer(
+                        texts, return_tensors="pt", padding=True, add_special_tokens=False
+                    )
+                    # Only the last position is read; full logits over Tiny Aya's 262k-token
+                    # vocabulary for every position need ~15 GB at batch 32.
+                    out = model(**inputs.to(model.device), logits_to_keep=1)
+                    picks = out.logits[:, -1, letter_ids].argmax(dim=-1).tolist()
+                    correct += sum(
+                        LETTERS[p] == r["answer"].strip() for p, r in zip(picks, chunk, strict=True)
+                    )
+                scores[lang] = correct / len(rows)
+                log.info("%s capability %s: %.3f", name, lang, scores[lang])
+    finally:
+        # `evaluate` starts a vLLM engine next (task score), which needs the GPU memory back.
+        # A steering context also holds the model, so both references go.
+        del model, context
+        release_memory()
     return scores
