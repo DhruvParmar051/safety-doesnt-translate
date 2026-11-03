@@ -62,7 +62,7 @@ judge:
   hand_label_per_language: 40
 
 task:
-  # Harmless fine-tune that drifts safety (Qi et al., 2023). VERIFY(M1): language codes.
+  # Harmless fine-tune that drifts safety (Qi et al., 2023). Codes checked: every language has rows.
   dataset: CohereLabs/aya_dataset
   language_codes: { en: eng, es: spa, ru: rus, ar: arb, hi: hin, fil: fil, bn: ben, sw: swh }
   train_per_language: 250

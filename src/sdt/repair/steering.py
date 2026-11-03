@@ -45,16 +45,10 @@ def build_steering_context(
     prompts = calib_prompts(config)
     harmful = [p for kinds in prompts.values() for p in kinds[Kind.HARMFUL]]
     harmless = [p for kinds in prompts.values() for p in kinds[Kind.HARMLESS]]
-    try:
-        # VERIFY(M1): how RefusalDirectionConfig(pick_layer=...) is passed to the trainer.
-        trainer = steer.RefusalDirectionTrainer(
-            model,
-            tokenizer,
-            alpha=spec["alpha"],
-            config=steer.RefusalDirectionConfig(pick_layer=spec["layer"]),
-        )
-    except TypeError:
-        log.warning("RefusalDirectionTrainer has no `config` argument; using its own layer choice")
-        trainer = steer.RefusalDirectionTrainer(model, tokenizer, alpha=spec["alpha"])
+    # `layers` lists the decoder layers that get the steering hook (SafeTune 0.1.8).
+    trainer = steer.RefusalDirectionTrainer(
+        model, tokenizer, layers=[spec["layer"]], alpha=spec["alpha"]
+    )
+    # The wrapped model is a context manager: hooks on at __enter__, off at __exit__.
     wrapped, _ = trainer.calibrate(harmful=harmful, harmless=harmless)
     return wrapped

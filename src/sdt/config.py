@@ -110,6 +110,22 @@ def load_config(
     return Config(raw=raw, repair=repair, root=path.resolve().parents[1], profile=profile)
 
 
+LEXSI_LIBRARIES = ("curatorkit", "safetune", "circuitkit", "auditkit")
+
+
+def library_versions() -> dict[str, str | None]:
+    """Installed Lexsi Labs library versions (None if missing); without one, its step falls back."""
+    import importlib.metadata
+
+    versions: dict[str, str | None] = {}
+    for name in LEXSI_LIBRARIES:
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            versions[name] = None
+    return versions
+
+
 def save_run_config(config: Config, out_dir: Path, **extra: Any) -> None:
     """Write the config used for a run next to its outputs, so every number is traceable."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -118,5 +134,6 @@ def save_run_config(config: Config, out_dir: Path, **extra: Any) -> None:
         "project": config.raw,
         "repair": config.repair,
         "args": extra,
+        "libraries": library_versions(),
     }
     (out_dir / "run_config.yaml").write_text(yaml.safe_dump(payload, sort_keys=False))

@@ -35,7 +35,7 @@ def curatorkit_keep_set(records: list[PromptRecord], work_dir: Path) -> set[str]
     source = work_dir / "curator_input.jsonl"
     write_jsonl(source, ({"instruction": r.prompt, "input": "", "output": r.id} for r in records))
     out_dir = work_dir / "curatorkit"
-    # VERIFY(M1): CuratorKIT documents HF names and PDFs as `dataset`; confirm a local JSONL works.
+    # CuratorKIT 0.1.22 reads a local JSONL as `dataset` and writes the kept rows to sft_alpaca.jsonl.
     result = Curator(
         CuratorConfig(
             dataset=str(source),

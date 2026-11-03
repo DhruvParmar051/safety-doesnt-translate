@@ -15,7 +15,8 @@ steer:
   alpha: 0.3                       # SafeTune says its default (20) is far too strong
   layer: 24
 
-# Methods run through the SafeTune CLI. VERIFY(M1): replace with names printed by `safetune list`.
+# Methods run through the SafeTune CLI (names from `safetune list`, SafeTune 0.1.8). Both need only
+# the drifted, base and aligned models.
 safetune_cli:
   - somf
   - safemerge
