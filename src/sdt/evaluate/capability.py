@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+from pathlib import Path
 
 from sdt.config import Config
 from sdt.models import chat_prompt, load_for_generation
@@ -18,13 +19,29 @@ def mmlu_question(row: dict) -> str:
     return f"{row['question']}\n{options}\nAnswer with the letter of the correct option only."
 
 
+def split_files(dataset: str, split: str) -> dict[str, list[str]]:
+    """{language: parquet files of `split`}, read from the local Hub snapshot.
+
+    Loading by config name needs the Hub even when the files are cached, and GPU nodes on the
+    cluster are offline; the snapshot keeps one folder per language.
+    """
+    from huggingface_hub import snapshot_download
+
+    pattern = f"*/{split}-*.parquet"
+    root = Path(snapshot_download(dataset, repo_type="dataset", allow_patterns=[pattern]))
+    files: dict[str, list[str]] = {}
+    for path in sorted(root.glob(pattern)):
+        files.setdefault(path.parent.name, []).append(str(path))
+    return files
+
+
 def capability_by_language(config: Config, name: str) -> dict[str, float]:
     """Accuracy per covered language (Global-MMLU-Lite has no Russian or Filipino)."""
     import torch
-    from datasets import get_dataset_config_names, load_dataset
+    from datasets import load_dataset
 
     spec = config["capability"]
-    available = set(get_dataset_config_names(spec["dataset"]))
+    available = split_files(spec["dataset"], spec["split"])
     model, tokenizer, context = load_for_generation(config, name)
     model.eval()
     letter_ids = [tokenizer.encode(letter, add_special_tokens=False)[0] for letter in LETTERS]
@@ -35,7 +52,7 @@ def capability_by_language(config: Config, name: str) -> dict[str, float]:
         for lang in config.languages:
             if lang not in available:
                 continue
-            rows = list(load_dataset(spec["dataset"], lang, split=spec["split"]))
+            rows = list(load_dataset("parquet", data_files=available[lang], split="train"))
             random.Random(f"{config.seed}-mmlu-{lang}").shuffle(rows)
             rows = rows[: spec["per_language"]]
             correct = 0
@@ -45,7 +62,10 @@ def capability_by_language(config: Config, name: str) -> dict[str, float]:
                 inputs = tokenizer(
                     texts, return_tensors="pt", padding=True, add_special_tokens=False
                 )
-                logits = model(**inputs.to(model.device)).logits[:, -1, letter_ids]
+                # Only the last position is read; full logits over Tiny Aya's 262k-token vocabulary
+                # for every position need ~15 GB at batch 32.
+                out = model(**inputs.to(model.device), logits_to_keep=1)
+                logits = out.logits[:, -1, letter_ids]
                 picks = logits.argmax(dim=-1).tolist()
                 correct += sum(
                     LETTERS[p] == r["answer"].strip() for p, r in zip(picks, chunk, strict=True)

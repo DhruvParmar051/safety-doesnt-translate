@@ -105,9 +105,9 @@ def _metric(model, inputs, layer: int, direction, embeds=None):
     handle = decoder_layers(model)[layer].register_forward_hook(grab)
     try:
         if embeds is not None:
-            model(inputs_embeds=embeds, attention_mask=inputs["attention_mask"])
+            model(inputs_embeds=embeds, attention_mask=inputs["attention_mask"], logits_to_keep=1)
         else:
-            model(**inputs)
+            model(**inputs, logits_to_keep=1)  # the hook reads the residual, not logits
     finally:
         handle.remove()
     return (captured["h"].float() @ direction.to(captured["h"].device)).mean()
@@ -159,7 +159,7 @@ def rank_components(
             model.device
         )
         with torch.no_grad(), _Recorder(ref_model, layer_star + 1) as rec_g:
-            ref_model(**inputs)
+            ref_model(**inputs, logits_to_keep=1)
         attn_g = {k: v[:, -1].float() for k, v in rec_g.attn.items()}
         mlp_g = {k: v[:, -1].float() for k, v in rec_g.mlp.items()}
         batches.append((inputs, attn_g, mlp_g))
