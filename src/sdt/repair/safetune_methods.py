@@ -26,6 +26,14 @@ def run_resta(config: Config, alpha: float) -> str:
         aligned = load_hf_model(config.model_path("global"), device_map="cpu")
         # `alpha` scales the safety vector (aligned - base) added to the drifted weights.
         patched = ReStaTrainer(drifted, base_model=base, aligned_model=aligned, alpha=alpha).apply()
+        # Saving re-ties lm_head to the embeddings; if ReStA had edited them as two tensors, one
+        # edit would be lost on reload without notice.
+        head, embed = patched.get_output_embeddings(), patched.get_input_embeddings()
+        if (
+            getattr(patched.config, "tie_word_embeddings", False)
+            and head.weight is not embed.weight
+        ):
+            raise RuntimeError("ReStA untied lm_head from the embeddings; the save would drop one")
         patched.save_pretrained(out, safe_serialization=True)
         load_tokenizer(config.model_path("drifted")).save_pretrained(out)
     changed = fraction_changed(load_state_dict(config, "drifted"), load_state_dict(config, name))

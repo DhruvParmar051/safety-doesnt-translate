@@ -90,6 +90,7 @@ class ModelMetrics:
     # The same gap on XSTest's unsafe prompts only: identical prompts in every language, so the
     # gap is not confounded by which datasets cover which language.
     parallel_safety_gap: float | None = None
+    n_parallel: int | None = None  # prompt groups behind it: validly labelled in every language
     invalid_rate: float | None = None  # share of replies the judge could not label
     mean_asr: float | None = None
     mean_over_refusal: float | None = None

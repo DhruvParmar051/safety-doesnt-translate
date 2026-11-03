@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from sdt.config import Config
+from sdt.config import Config, save_run_config
 from sdt.io import read_json, write_json
 from sdt.models import QUANT_SPEC, default_device, load_hf_model, load_quantized
 
@@ -65,6 +65,7 @@ def compress(config: Config, source: str, mode: str) -> str:
     elif mode != "uniform":
         raise ValueError(f"Unknown mode '{mode}'")
     name = f"{source}-4bit-{mode}"
+    save_run_config(config, config.runs_dir / "models" / name, step="compress", mode=mode)
     write_json(
         config.runs_dir / "models" / name / QUANT_SPEC,
         {

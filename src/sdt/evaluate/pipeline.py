@@ -59,10 +59,10 @@ def generate(
     rows, stats = generate_for_model(config, name, records, backend)
     path = generations_path(config, name, split)
     write_jsonl(path, rows)
-    stats_info = asdict(stats) | {
-        "tokens_per_second": stats.tokens_per_second,
-        "backend": backend or config["generation"]["backend"],
-    }
+    save_run_config(
+        config, path.with_suffix(""), step="generate", split=split.value, backend=backend
+    )
+    stats_info = asdict(stats) | {"tokens_per_second": stats.tokens_per_second}
     write_json(path.with_suffix(".stats.json"), stats_info)
     return stats
 
@@ -72,14 +72,22 @@ def judge(
 ) -> list[JudgeRecord]:
     rows = load_generations(generations_path(config, name, split))
     labels = run_judge(config, judge_name, rows)
-    write_jsonl(judgements_path(config, name, judge_name, split), labels)
+    path = judgements_path(config, name, judge_name, split)
+    write_jsonl(path, labels)
+    save_run_config(config, path.with_suffix(""), step="judge", judge=judge_name, split=split.value)
     return labels
 
 
 def score(config: Config, name: str, judge_name: str, extras: dict | None = None) -> ModelMetrics:
     """Safety metrics from saved labels, plus capability/task/size/repair info when available."""
     labels = load_judgements(judgements_path(config, name, judge_name))
-    metrics = model_metrics(name, judge_name, labels, config.languages)
+    metrics = model_metrics(
+        name,
+        judge_name,
+        labels,
+        config.languages,
+        refusals=judge_name != config["judge"]["secondary"],
+    )
     if extras is None:  # `sdt metrics` after a split run: reuse what `evaluate` measured
         saved = config.runs_dir / "metrics" / name / "extras.json"
         extras = read_json(saved) if saved.exists() else {}
@@ -108,7 +116,10 @@ def score(config: Config, name: str, judge_name: str, extras: dict | None = None
     if size_file.exists():
         metrics.size_gb = read_json(size_file)["size_gb"]
 
-    write_json(metrics_path(config, name, judge_name), asdict(metrics))
+    path = metrics_path(config, name, judge_name)
+    write_json(path, asdict(metrics))
+    # `evaluate` keeps its own run config in runs/metrics/<model>/, so scoring has a folder per judge.
+    save_run_config(config, config.runs_dir / "metrics" / name / judge_name, step="metrics")
     return metrics
 
 

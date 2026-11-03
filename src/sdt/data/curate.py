@@ -9,12 +9,13 @@ from pathlib import Path
 
 from sdt.config import Config
 from sdt.data.text_checks import char_ngram_f1, normalize_for_dedup, script_share
-from sdt.io import read_jsonl, write_jsonl
+from sdt.io import read_jsonl, write_json, write_jsonl
 from sdt.schema import PromptRecord
 
 log = logging.getLogger(__name__)
 
 MIN_SCRIPT_SHARE = 0.6
+ID_TAG = "sdt-row-id:"  # marks the row id in the output field CuratorKIT passes through
 
 
 @dataclass
@@ -30,10 +31,16 @@ def curatorkit_keep_set(records: list[PromptRecord], work_dir: Path) -> set[str]
         from curatorkit import Curator, CuratorConfig
     except ImportError:
         log.warning("curatorkit not installed; using exact-match dedupe only")
+        write_json(work_dir / "dedupe.json", {"method": "exact"})
         return None
 
     source = work_dir / "curator_input.jsonl"
-    write_jsonl(source, ({"instruction": r.prompt, "input": "", "output": r.id} for r in records))
+    # CuratorKIT dedupes on instruction + output, and the output carries the row id back. The id
+    # is masked out of the comparison, or every row would differ and nothing would be removed.
+    write_jsonl(
+        source,
+        ({"instruction": r.prompt, "input": "", "output": f"{ID_TAG}{r.id}"} for r in records),
+    )
     out_dir = work_dir / "curatorkit"
     # CuratorKIT 0.1.22 reads a local JSONL as `dataset` and writes the kept rows to sft_alpaca.jsonl.
     result = Curator(
@@ -41,6 +48,8 @@ def curatorkit_keep_set(records: list[PromptRecord], work_dir: Path) -> set[str]
             dataset=str(source),
             dedup="minhash",
             clean=True,
+            dedup_ignore_patterns=[rf"{ID_TAG}\S+"],
+            clean_fields=["instruction"],  # cleaning must not touch the id
             min_tokens=1,
             export_formats=["alpaca"],
             output_dir=str(out_dir),
@@ -48,7 +57,8 @@ def curatorkit_keep_set(records: list[PromptRecord], work_dir: Path) -> set[str]
     ).run()
     result.print_summary()
     kept = out_dir / "sft_alpaca.jsonl"
-    return {row["output"] for row in read_jsonl(kept)}
+    write_json(work_dir / "dedupe.json", {"method": "curatorkit-minhash"})
+    return {row["output"].removeprefix(ID_TAG) for row in read_jsonl(kept)}
 
 
 def curate(

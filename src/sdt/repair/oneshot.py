@@ -8,6 +8,7 @@ calibration-split harmful prompts.
 from __future__ import annotations
 
 import logging
+import random
 
 from sdt.config import Config
 from sdt.repair.common import (
@@ -47,12 +48,12 @@ def global_threshold(
 
 
 def oneshot_patch(
-    drifted: StateDict, aligned: StateDict, saliency: StateDict, fraction: float
+    drifted: StateDict, aligned: StateDict, saliency: StateDict, fraction: float, seed: int = 0
 ) -> StateDict:
     """Replaces the top-`fraction` most salient entries with Global's values."""
     import torch
 
-    threshold = global_threshold(saliency, fraction)
+    threshold = global_threshold(saliency, fraction, seed=seed)
     out = {}
     for key, value in drifted.items():
         if key in saliency and is_patchable(value):
@@ -82,9 +83,13 @@ def refusal_pairs(config: Config, per_language: int | None = None) -> list[dict]
             "Run `sdt generate global --split calib` and `sdt judge global --split calib` first"
         )
     refused = {j.id for j in load_judgements(judge_file) if j.label == Label.REFUSAL}
+    gens = load_generations(gens_file)
+    # File order is source order (Aya Red-teaming first); a seeded shuffle lets every harmful
+    # source reach the per-language cap, as `calib_prompts` does.
+    random.Random(f"{config.seed}-refusals").shuffle(gens)
     counts: dict[str, int] = {}
     rows = []
-    for g in load_generations(gens_file):
+    for g in gens:
         if g.kind != Kind.HARMFUL or g.id not in refused:
             continue
         if per_language is not None and counts.get(g.lang, 0) >= per_language:
@@ -125,7 +130,12 @@ def compute_saliency(config: Config, aligned: StateDict) -> StateDict:
         )
         labels = enc["input_ids"].clone()
         for row, prompt in enumerate(prompts):  # loss only on the refusal tokens
-            labels[row, : len(tok(prompt, add_special_tokens=False).input_ids)] = -100
+            prefix = tok(prompt, add_special_tokens=False).input_ids
+            # Right padding: the prompt must be the exact first tokens of the full sequence, or
+            # the mask would cover part of the refusal (or leave part of the prompt in the loss).
+            if enc["input_ids"][row, : len(prefix)].tolist() != prefix:
+                raise ValueError("Chat template: the prompt is not a token prefix of the full turn")
+            labels[row, : len(prefix)] = -100
         labels[enc["attention_mask"] == 0] = -100
         loss = model(**enc, labels=labels).loss * len(chunk) / len(pairs)
         loss.backward()
@@ -146,7 +156,7 @@ def run(config: Config, fraction: float) -> str:
         aligned = load_state_dict(config, "global")
         saliency = compute_saliency(config, aligned)
         drifted = load_state_dict(config, "drifted")
-        patched = oneshot_patch(drifted, aligned, saliency, fraction)
+        patched = oneshot_patch(drifted, aligned, saliency, fraction, seed=config.seed)
         save_model(config, patched, name)
     record_repair(
         config,

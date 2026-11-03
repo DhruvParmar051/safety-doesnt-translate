@@ -32,6 +32,7 @@ class GenerationStats:
     n_prompts: int
     n_new_tokens: int
     seconds: float
+    backend: str = ""  # the one that actually ran: 4-bit and steered models force transformers
 
     @property
     def tokens_per_second(self) -> float:
@@ -219,6 +220,7 @@ def generate_for_model(
         finally:
             del model
             release_memory()
+    stats[0].backend = backend
     rows = [
         GenerationRecord(r.id, name, r.lang, r.kind, r.prompt, reply.strip(), source=r.source)
         for r, reply in zip(records, replies, strict=True)

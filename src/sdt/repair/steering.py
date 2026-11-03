@@ -28,6 +28,7 @@ def create_steered_model(config: Config, alpha: float, layer: int, source: str =
             "gpu_minutes": None,
             "method": "steer",
             "alpha": alpha,
+            "layer": layer,
         },
     )
     return name
