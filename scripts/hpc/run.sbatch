@@ -4,6 +4,8 @@
 # A finished command leaves runs/.done/<command>, so resubmitting the same job resumes it.
 # STAGE lists the configured models to copy to the GPU node (default: all), e.g.
 #   STAGE="translator judge_secondary" sbatch ...
+# BEST=<drifted model> replaces @BEST@ in the commands with that model's best repair, chosen when
+# the job starts (scripts/hpc/best_repair.py), e.g. "compress uniform --model @BEST@".
 #SBATCH --job-name=sdt
 #SBATCH --partition=rtx6000-mig
 #SBATCH --gres=gpu:1g.24gb:1
@@ -31,7 +33,12 @@ trap 'rsync -a "$MODELS_DIR/" "master:$MODELS_DIR/"' EXIT
 
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 mkdir -p runs/.done
+if [ -n "${BEST:-}" ]; then
+  best=$(python scripts/hpc/best_repair.py "$BEST")
+  echo "== best repair of $BEST: $best"
+fi
 for command in "$@"; do
+  command=${command//@BEST@/${best:-@BEST@}}
   marker="runs/.done/${command// /_}"
   if [ -e "$marker" ]; then
     echo "== skip (done): sdt $command"

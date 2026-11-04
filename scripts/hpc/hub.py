@@ -17,8 +17,19 @@ SKIP = ["original/*", "metal/*", "*.bin", "*.pth", "*.gguf"]
 def repos(config: Config, names: list[str] | None = None) -> tuple[list[str], list[str]]:
     """Hub ids of the named models (default: all) and of the datasets the jobs read."""
     chosen = {k: v for k, v in config["models"].items() if not names or k in names}
-    models = sorted({v for v in chosen.values() if "/" in str(v)})
-    return models, [config["capability"]["dataset"]]
+    models = {v for v in chosen.values() if "/" in str(v)}
+    if not names or "translator" in names:  # the seq2seq translators go with the translator
+        models |= {c["model"] for c in config["translation"]["seq2seq_candidates"]}
+    models = sorted(models)
+    return models, [config["capability"]["dataset"], config["finetune_harmful"]["dataset"]]
+
+
+def skip_patterns(repo: str) -> list[str]:
+    """SKIP, but keep *.bin for repos that ship no safetensors (e.g. NLLB-200)."""
+    from huggingface_hub import list_repo_files
+
+    has_safetensors = any(f.endswith(".safetensors") for f in list_repo_files(repo))
+    return SKIP if has_safetensors else [p for p in SKIP if p != "*.bin"]
 
 
 def main() -> None:
@@ -34,7 +45,7 @@ def main() -> None:
 
         models, datasets = repos(config, sys.argv[2:])
         for repo in models:
-            print(snapshot_download(repo, ignore_patterns=SKIP))
+            print(snapshot_download(repo, ignore_patterns=skip_patterns(repo)))
         for repo in datasets:
             print(snapshot_download(repo, repo_type="dataset"))
     else:

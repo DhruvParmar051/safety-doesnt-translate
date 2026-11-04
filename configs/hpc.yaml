@@ -9,3 +9,14 @@ finetune:
   batch_size: 2
   grad_accum: 8
   gradient_checkpointing: true
+
+# One-shot saliency backpropagates through the whole model; one refusal pair at a time fits a slice.
+repair:
+  oneshot:
+    batch_size: 1
+
+# Steps that only need the H200 for memory fit a slice this way, so they need not wait for it.
+translation:
+  load_in_8bit: true             # Aya 101 (13B) in 8-bit fits 24 GB
+locate:
+  batch_size: 2                  # attribution patching OOMs at 8 on a slice
