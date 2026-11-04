@@ -32,7 +32,7 @@ def _data(cfg, args) -> None:
 def _finetune(cfg, args) -> None:
     from sdt.finetune import train_drifted
 
-    print("Saved", train_drifted(cfg, args.variant, args.seed))
+    print("Saved", train_drifted(cfg, args.variant, args.seed, args.base))
 
 
 def _generate(cfg, args) -> None:
@@ -117,6 +117,16 @@ def _hand_labels(cfg, args) -> None:
     print(report)
 
 
+def _via_english(cfg, args) -> None:
+    from sdt.judge.via_english import translate_replies, via_english_report
+
+    langs = args.langs or cfg["judge"]["via_english_languages"]
+    if args.action == "translate":
+        print("Wrote", translate_replies(cfg, args.model, langs))
+    else:
+        print(via_english_report(cfg, args.model, langs))
+
+
 def _locate(cfg, args) -> None:
     if args.step == "directions":
         from sdt.locate.directions import run_directions
@@ -130,7 +140,8 @@ def _locate(cfg, args) -> None:
     elif args.step == "circuitkit":
         from sdt.locate.circuitkit_adapter import discover_refusal_circuit
 
-        discover_refusal_circuit(cfg)
+        # The first --models entry; the default list starts with global.
+        discover_refusal_circuit(cfg, args.models[0])
 
 
 def _repair(cfg, args) -> None:
@@ -266,6 +277,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument(
         "--seed", type=int, help="training seed for a replicate; saved as <name>-s<seed>"
     )
+    s.add_argument(
+        "--base",
+        default="global",
+        help="model to fine-tune, e.g. fire; other than global it is saved as <name>-<base>",
+    )
     s.set_defaults(fn=_finetune)
 
     for cmd, fn in (("generate", _generate), ("judge", _judge)):
@@ -299,6 +315,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="sheet only: judge.hand_label_focus (random rows of one model plus judge disagreements)",
     )
     s.set_defaults(fn=_hand_labels)
+
+    s = sub.add_parser(
+        "via-english", help="translate replies to English and judge again (judge reliability)"
+    )
+    s.add_argument("action", choices=["translate", "report"])
+    s.add_argument("model")
+    s.add_argument("--langs", nargs="+", help="default: judge.via_english_languages")
+    s.set_defaults(fn=_via_english)
 
     s = sub.add_parser("locate", help="phase 3")
     s.add_argument("step", choices=["directions", "components", "circuitkit"])

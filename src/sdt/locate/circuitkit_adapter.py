@@ -85,7 +85,9 @@ def write_refusal_task(config: Config) -> str:
 def discover_refusal_circuit(config: Config, model_name: str = "global") -> None:
     """Runs CircuitKIT's EAP-IG discovery on the refusal task (cross-check of our attribution ranking)."""
     task_path = write_refusal_task(config)
-    out = config.run_path("locate", "circuitkit", "circuit.pt")
+    # Global keeps the original folder; another model's circuit goes in its own subfolder.
+    sub = () if model_name == "global" else (model_name,)
+    out = config.run_path("locate", "circuitkit", *sub, "circuit.pt")
     cmd = [
         "circuitkit",
         "discover-yaml",

@@ -105,7 +105,9 @@ def train_lora(
 DRIFT_VARIANTS = ("harmless", "harmful")
 
 
-def train_drifted(config: Config, variant: str = "harmless", seed: int | None = None) -> Path:
+def train_drifted(
+    config: Config, variant: str = "harmless", seed: int | None = None, base: str = "global"
+) -> Path:
     """Global + LoRA on the harmless task = the drifted model every repair starts from.
 
     variant "harmful" adds a few harmful English examples (`sdt data harmful`) to the same task
@@ -113,6 +115,8 @@ def train_drifted(config: Config, variant: str = "harmless", seed: int | None = 
 
     `seed` other than the project seed retrains on the same rows with a different LoRA init and
     data order, saved as `<name>-s<seed>`: a replicate that shows the drift is not one run's luck.
+    `base` other than global fine-tunes a regional variant (fire, water, earth) the same way, saved
+    as `<name>-<base>`: does a language's share of training data make its safety harder to drift?
     """
     processed = config.data_dir / "processed"
     rows = list(read_jsonl(processed / "task_train.jsonl"))
@@ -123,12 +127,19 @@ def train_drifted(config: Config, variant: str = "harmless", seed: int | None = 
         name = "drifted-harmful"
     elif variant != "harmless":
         raise ValueError(f"Unknown drift variant '{variant}'")
+    if base != "global":
+        name += f"-{base}"
     if seed is not None and seed != config.seed:
         name += f"-s{seed}"
     out = config.runs_dir / "models" / name
-    minutes = train_lora(config, config.model_path("global"), rows, out, seed)
+    minutes = train_lora(config, config.model_path(base), rows, out, seed)
     write_json(
         config.run_path("finetune", f"{name}.json"),
-        {"gpu_minutes": minutes, "rows": len(rows), "seed": config.seed if seed is None else seed},
+        {
+            "gpu_minutes": minutes,
+            "rows": len(rows),
+            "seed": config.seed if seed is None else seed,
+            "base": base,
+        },
     )
     return out
