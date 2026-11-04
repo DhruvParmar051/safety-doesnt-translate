@@ -101,3 +101,22 @@ def test_regional_drift_is_named_after_its_base(monkeypatch, tmp_path):
     assert finetune.train_drifted(config, "harmful", seed=2, base="water").name == (
         "drifted-harmful-water-s2"
     )
+
+
+def test_circuitkit_gets_a_local_model_by_folder_name(monkeypatch, tmp_path):
+    """CircuitKIT rejects paths; a local checkpoint is passed by name, from its parent folder."""
+    from sdt.locate import circuitkit_adapter
+
+    config = _config(tmp_path)
+    (tmp_path / "runs" / "models" / "drifted-harmful").mkdir(parents=True)
+    monkeypatch.setattr(circuitkit_adapter, "write_refusal_task", lambda config: "task.yaml")
+    calls = []
+    monkeypatch.setattr(
+        circuitkit_adapter.subprocess, "run", lambda cmd, check, cwd: calls.append((cmd, cwd))
+    )
+    circuitkit_adapter.discover_refusal_circuit(config, "drifted-harmful")
+    cmd, cwd = calls[0]
+    assert cmd[cmd.index("--model") + 1] == "drifted-harmful"
+    assert cwd == str(tmp_path / "runs" / "models")
+    out = cmd[cmd.index("--output") + 1]
+    assert out.endswith("circuitkit/drifted-harmful/circuit.pt") and out.startswith("/")

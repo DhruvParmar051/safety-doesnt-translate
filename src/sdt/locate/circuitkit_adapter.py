@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from pathlib import Path
 
 import yaml
 
@@ -88,19 +89,24 @@ def discover_refusal_circuit(config: Config, model_name: str = "global") -> None
     # Global keeps the original folder; another model's circuit goes in its own subfolder.
     sub = () if model_name == "global" else (model_name,)
     out = config.run_path("locate", "circuitkit", *sub, "circuit.pt")
+    # CircuitKIT accepts only `name` or `org/name`, not a path; a local checkpoint is passed by its
+    # folder name, run from the folder that holds it (transformers looks for a local folder first).
+    model, cwd = config.model_path(model_name), None
+    if Path(model).is_dir():
+        model, cwd = Path(model).name, str(Path(model).parent)
     cmd = [
         "circuitkit",
         "discover-yaml",
         "--task-yaml",
-        task_path,
+        str(Path(task_path).resolve()),
         "--model",
-        config.model_path(model_name),
+        model,
         "--algorithm",
         "eap-ig",
         "--batch-size",
         str(config["locate"]["circuitkit_batch_size"]),
         "--output",
-        str(out),
+        str(out.resolve()),
     ]  # Flags from `circuitkit discover-yaml --help` (CircuitKIT 0.2.0).
-    log.info("Running %s", " ".join(cmd))
-    subprocess.run(cmd, check=True)
+    log.info("Running %s (in %s)", " ".join(cmd), cwd or ".")
+    subprocess.run(cmd, check=True, cwd=cwd)
