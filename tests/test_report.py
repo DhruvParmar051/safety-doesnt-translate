@@ -4,7 +4,7 @@ import pytest
 
 from sdt.cli import main
 from sdt.config import DEFAULT_CONFIG, load_config
-from sdt.evaluate import report
+from sdt.evaluate import report, roi
 from sdt.io import write_json
 
 
@@ -17,6 +17,11 @@ def cfg(tmp_path):
 def fake_metrics(cfg, name: str, asr: float = 0.1) -> None:
     langs = {lang: {"asr": asr} for lang in cfg.languages}
     write_json(cfg.runs_dir / "metrics" / f"{name}.json", {"name": name, "languages": langs})
+
+
+def with_roi(cfg, **values):
+    raw = {**cfg.raw, "roi": {**cfg["roi"], **values}}
+    return dataclasses.replace(cfg, raw=raw)
 
 
 # Task 1: compression chart in `sdt report all`
@@ -83,3 +88,73 @@ def test_layer_drift_chart_one_png_per_model(cfg, tmp_path):
         "layer_drift_drifted.png",
         "layer_drift_fire.png",
     ]
+
+
+# Task 3: ROI
+
+
+def fake_repair(cfg, name: str, minutes: float | None) -> None:
+    write_json(cfg.runs_dir / "repair" / f"{name}.json", {"name": name, "gpu_minutes": minutes})
+
+
+def fake_stats(cfg, model: str, tokens_per_second: float, backend: str = "vllm") -> None:
+    write_json(
+        cfg.runs_dir / "generations" / f"{model}.stats.json",
+        {"tokens_per_second": tokens_per_second, "backend": backend},
+    )
+
+
+def test_repair_costs_hand_computed(cfg):
+    cfg = with_roi(cfg, gpu_hour_usd=4.0)
+    fake_repair(cfg, "repair-oneshot-0.005", 6.0)
+    fake_repair(cfg, "repair-safety-ft", 30.0)
+    fake_repair(cfg, "repair-steer-0.3", None)  # no weights edited: left out
+    costs = {r["name"]: r for r in roi.repair_costs(cfg)}
+    assert set(costs) == {"repair-oneshot-0.005", "repair-safety-ft"}
+    assert costs["repair-oneshot-0.005"]["usd"] == pytest.approx(0.40)
+    assert costs["repair-safety-ft"]["usd"] == pytest.approx(2.00)
+    assert costs["repair-oneshot-0.005"]["ratio_vs_retraining"] == pytest.approx(0.2)
+
+
+def test_hosting_cost_hand_computed(cfg):
+    # 1,000 requests x 300 tokens = 300,000 tokens; at 100 tokens/s = 3,000 s = 5/6 hour
+    cfg = with_roi(
+        cfg,
+        gpu_hour_usd=4.0,
+        monthly_requests=1000,
+        tokens_per_request=300,
+        api_usd_per_million_tokens=10.0,
+    )
+    fake_stats(cfg, "global", 100.0)
+    h = roi.hosting_cost(cfg, "global")
+    assert h["gpu_hours_per_month"] == pytest.approx(5 / 6)
+    assert h["self_hosted_usd"] == pytest.approx(10 / 3)
+    assert h["api_usd"] == pytest.approx(3.0)  # 0.3 million tokens x $10
+
+
+def test_hosting_cost_refuses_non_vllm_throughput(cfg):
+    fake_stats(cfg, "global", 100.0, backend="mlx")
+    with pytest.raises(ValueError, match="vllm"):
+        roi.hosting_cost(cfg, "global")
+
+
+def test_roi_markdown_without_prices_has_no_dollars(cfg):
+    assert roi.missing_prices(cfg) == ["gpu_hour_usd", "api_usd_per_million_tokens"]
+    fake_repair(cfg, "repair-oneshot-0.005", 6.0)
+    fake_repair(cfg, "repair-safety-ft", 30.0)
+    fake_stats(cfg, "global", 100.0)
+    text = roi.roi_markdown(cfg)
+    assert "$" not in text
+    assert "0.20x" in text
+    assert "gpu_hour_usd, api_usd_per_million_tokens" in text
+
+
+def test_roi_markdown_with_prices(cfg):
+    cfg = with_roi(cfg, gpu_hour_usd=4.0, api_usd_per_million_tokens=10.0)
+    fake_repair(cfg, "repair-oneshot-0.005", 6.0)
+    fake_repair(cfg, "repair-safety-ft", 30.0)
+    text = roi.roi_markdown(cfg)
+    assert "| repair-oneshot-0.005 | 6.0 | $0.40 | 0.20x |" in text
+    assert "| repair-safety-ft (retraining baseline) | 30.0 | $2.00 | 1.00x |" in text
+    assert "Not computed" in text  # no throughput measured yet
+    assert "withheld" not in text

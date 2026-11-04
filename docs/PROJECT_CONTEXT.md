@@ -130,7 +130,7 @@ Everything runs through the `sdt` command line (`src/sdt/cli.py`). One model is 
 | 3 Locate | `sdt locate directions`, `sdt locate components`, `sdt locate circuitkit` | `runs/locate/directions.pt`, `similarity.json`, `layer_strength.json`, `components.json` | CircuitKIT |
 | 4 Repair | `sdt repair <method>` | `runs/models/repair-<method>-<setting>`, `runs/repair/<name>.json` | SafeTune |
 | 5 Compress | `sdt compress uniform|mixed --model <m>` | `runs/models/<m>-4bit-<mode>/quantization.json`, `size.json` | CircuitKIT / bitsandbytes / quanto |
-| 6 Report | `sdt report all`, `sdt hand-labels sheet|agreement`, `sdt publish ...` | `results/*.png`, `results/*.md` | AuditKIT |
+| 6 Report | `sdt report all` (also `layer`, `compression`, `roi`), `sdt hand-labels sheet|agreement`, `sdt publish ...` | `results/*.png` (incl. `layer_drift_<model>.png`, `compression_<source>.png`), `results/*.md` (incl. `roi.md`) | AuditKIT |
 | Demo | `python space/deploy.py ...` | HF Space on ZeroGPU | — |
 
 Repair methods (`sdt repair ...`):

@@ -96,3 +96,11 @@ compress:
   backend: auto                  # auto = bitsandbytes on CUDA, optimum-quanto elsewhere
   protect_top_components: 20
   bnb_quant_type: nf4
+
+# `sdt report roi`. No dollar figure is printed while a price is null.
+roi:
+  gpu_hour_usd: null                # H200 price per hour; fill in from the provider we use
+  monthly_requests: 1000000         # assumption, stated in the article
+  tokens_per_request: 300           # prompt + reply, assumption
+  api_usd_per_million_tokens: null  # closed moderation/assistant API list price, with a source link
+  hosting_model: global             # whose measured tokens/s (H200 vLLM run) prices self-hosting

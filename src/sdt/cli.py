@@ -189,6 +189,17 @@ def _report(cfg, args) -> None:
     if args.what == "layer" or (args.what == "all" and strength_file.exists()):
         for model in read_json(strength_file):
             report.layer_drift_chart(cfg, model, out / f"layer_drift_{model}.png")
+    if args.what in ("roi", "all"):
+        from sdt.evaluate import roi
+
+        missing = roi.missing_prices(cfg)
+        if missing:
+            print("No dollar figures: set roi." + ", roi.".join(missing) + " in the config.")
+        out.mkdir(parents=True, exist_ok=True)
+        text = roi.roi_markdown(cfg, args.models[0] if args.models else None)
+        (out / "roi.md").write_text(text)
+        if args.what == "roi":
+            print(text)
     if args.what in ("table", "all"):
         out.mkdir(parents=True, exist_ok=True)
         (out / "metrics_table.md").write_text(report.metrics_table(cfg, models))
@@ -315,6 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
             "tradeoff",
             "compression",
             "layer",
+            "roi",
             "table",
             "all",
         ],
