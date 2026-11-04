@@ -161,3 +161,13 @@ def test_focused_sheet_is_blind_and_keyed(tmp_path):
         else:  # Aya and Llama Guard disagree on harmful vs not
             assert model == "g" or int(i) % 2 == 0
     assert len(key) == len({(r["model"], r["id"]) for r in rows}) == 7
+
+
+def test_compression_chart_refuses_more_models_than_colours(monkeypatch, tmp_path):
+    from sdt.evaluate import report
+
+    names = [f"m{i}" for i in range(len(report.SERIES) + 1)]
+    monkeypatch.setattr(report, "_asr_grid", lambda config, models: (names, [[0.1]] * len(names)))
+    monkeypatch.setattr(report, "_style", lambda: None)
+    with pytest.raises(ValueError, match="--models"):
+        report.compression_chart(None, names, tmp_path / "c.png")

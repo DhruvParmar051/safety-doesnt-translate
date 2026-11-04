@@ -215,6 +215,10 @@ def compression_chart(config: Config, models: list[str], out: Path) -> Path:
 
     plt = _style()
     names, grid = _asr_grid(config, models)
+    if len(names) > len(SERIES):
+        raise ValueError(
+            f"compression chart takes at most {len(SERIES)} models, got {len(names)}: pass --models"
+        )
     langs = config.languages
     x = np.arange(len(langs))
     width = 0.8 / max(len(names), 1)

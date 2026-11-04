@@ -105,8 +105,10 @@ judge3=$(BEST=drifted-harmful STAGE=judge_primary submit "${h200[@]}" --time=3:0
   "judge @BEST@-bf16-hf --judge aya" "metrics @BEST@-bf16-hf" \
   "judge @BEST@-4bit-uniform --judge aya" "metrics @BEST@-4bit-uniform" \
   "judge @BEST@-4bit-mixed --judge aya" "metrics @BEST@-4bit-mixed")
-report=$(STAGE=global submit --dependency=afterany:$judge3:$judge2b --time=1:00:00 \
-  --job-name=sdt-report $job "report all" "report compression")
+# Without --models, `report compression` would chart every model with metrics.
+report=$(BEST=drifted-harmful STAGE=global submit --dependency=afterany:$judge3:$judge2b --time=1:00:00 \
+  --job-name=sdt-report $job "report all" \
+  "report compression --models @BEST@-bf16-hf @BEST@-4bit-uniform @BEST@-4bit-mixed")
 
 printf '%s\n' "data $data" "eval-a $eval_a" "eval-b $eval_b" "locate $locate" "circuitkit $circuitkit" "judge-1 $judge1" \
   "repair-harmful ${rep_h[*]}" "judge-2a $judge2a" "repair-drifted ${rep_d[*]}" "judge-2b $judge2b" \
