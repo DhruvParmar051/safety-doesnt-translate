@@ -38,14 +38,14 @@ btrain=$(STAGE="fire water earth" submit "${h200[@]}" --time=4:00:00 --job-name=
   "finetune --variant harmful --base earth")
 beval=$(STAGE=$slices submit --time=4:00:00 --dependency=afterok:$btrain --job-name=sdt-x-regional-eval $job \
   "evaluate $dh-fire $lg" "evaluate $dh-water $lg" "evaluate $dh-earth $lg")
-# Aya judge for everything above; each part waits only on the job it needs (afterany: a failed
-# part leaves the others to be judged).
+# Aya judge for everything above (afterany: a failed part leaves the others to be judged). A job
+# stops at its first failing step, so the newest code (translate-then-judge) goes last.
 cmds=()
-for m in "$dh-via-en" repair-harmful-oneshot-0.01-via-en; do cmds+=("judge $m --judge aya"); done
-cmds+=("via-english report $dh" "via-english report repair-harmful-oneshot-0.01")
 for m in repair-harmful-circuit-patch-30 repair-harmful-circuit-patch-60 "$dh-fire" "$dh-water" "$dh-earth"; do
   cmds+=("judge $m --judge aya" "metrics $m")
 done
+for m in "$dh-via-en" repair-harmful-oneshot-0.01-via-en; do cmds+=("judge $m --judge aya"); done
+cmds+=("via-english report $dh" "via-english report repair-harmful-oneshot-0.01")
 judge=$(STAGE=judge_primary submit "${h200[@]}" --time=3:00:00 \
   --dependency=afterany:$trans:$patch:$beval --job-name=sdt-x-judge $job "${cmds[@]}")
 
