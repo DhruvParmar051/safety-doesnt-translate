@@ -16,6 +16,7 @@ from sdt.config import Config
 from sdt.io import write_json
 from sdt.locate.directions import calib_prompts
 from sdt.models import chat_prompt, decoder_layers, load_hf_model, load_tokenizer
+from sdt.repair.common import components_path
 from sdt.schema import Kind
 
 log = logging.getLogger(__name__)
@@ -153,8 +154,9 @@ def rank_components(
 
     totals: dict[tuple[str, int, int], float] = {}
     batches = []
-    for i in range(0, len(texts), 8):
-        batch = [chat_prompt(tok, t) for t in texts[i : i + 8]]
+    size = spec["batch_size"]
+    for i in range(0, len(texts), size):
+        batch = [chat_prompt(tok, t) for t in texts[i : i + size]]
         inputs = tok(batch, return_tensors="pt", padding=True, add_special_tokens=False).to(
             model.device
         )
@@ -181,9 +183,7 @@ def rank_components(
     )
     _confirm_with_patching(model, ranked[: spec["activation_patch_top"]], batches, layer_star, unit)
     top = ranked[: max(spec["top_components"], spec["activation_patch_top"])]
-    write_json(
-        config.run_path("locate", "components.json"), [asdict(c) | {"key": c.key} for c in top]
-    )
+    write_json(components_path(config, drifted), [asdict(c) | {"key": c.key} for c in top])
     log.info("Top components: %s", [c.key for c in top[:10]])
     return top
 

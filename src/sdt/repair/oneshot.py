@@ -18,6 +18,7 @@ from sdt.repair.common import (
     is_patchable,
     load_state_dict,
     record_repair,
+    repair_name,
     save_model,
 )
 
@@ -107,19 +108,28 @@ def refusal_pairs(config: Config, per_language: int | None = None) -> list[dict]
     return rows
 
 
-def compute_saliency(config: Config, aligned: StateDict) -> StateDict:
+def compute_saliency(config: Config, aligned: StateDict, source: str = "drifted") -> StateDict:
     """|grad · (θ_global - θ_drifted)| for every weight, from the refusal loss on the drifted model."""
     import torch
 
     from sdt.models import load_hf_model, load_tokenizer
 
-    path = config.model_path("drifted")
+    path = config.model_path(source)
     model, tok = load_hf_model(path), load_tokenizer(path)
-    model.eval()  # gradients still flow; eval() only switches off dropout so saliency is deterministic
+    # Checkpointing keeps activations within a 24 GB slice, and transformers only applies it in
+    # train mode. Train mode would switch dropout on, so it is used only for a model without any.
+    if getattr(model.config, "attention_dropout", 0.0) or getattr(
+        model.config, "hidden_dropout", 0.0
+    ):
+        model.eval()
+    else:
+        model.gradient_checkpointing_enable()
+        model.train()
     tok.padding_side = "right"
     pairs = refusal_pairs(config)
-    for i in range(0, len(pairs), 4):
-        chunk = pairs[i : i + 4]
+    size = config.repair["oneshot"]["batch_size"]
+    for i in range(0, len(pairs), size):
+        chunk = pairs[i : i + size]
         prompts = [
             tok.apply_chat_template(p["messages"][:1], tokenize=False, add_generation_prompt=True)
             for p in chunk
@@ -150,14 +160,14 @@ def compute_saliency(config: Config, aligned: StateDict) -> StateDict:
     return saliency
 
 
-def run(config: Config, fraction: float) -> str:
-    name = f"repair-oneshot-{fraction:g}"
+def run(config: Config, fraction: float, source: str = "drifted") -> str:
+    name = repair_name(source, f"repair-oneshot-{fraction:g}")
     with gpu_timer() as timer:
         aligned = load_state_dict(config, "global")
-        saliency = compute_saliency(config, aligned)
-        drifted = load_state_dict(config, "drifted")
+        saliency = compute_saliency(config, aligned, source)
+        drifted = load_state_dict(config, source)
         patched = oneshot_patch(drifted, aligned, saliency, fraction, seed=config.seed)
-        save_model(config, patched, name)
+        save_model(config, patched, name, skeleton=source)
     record_repair(
         config,
         name,
@@ -165,5 +175,6 @@ def run(config: Config, fraction: float) -> str:
         timer["minutes"],
         method="oneshot",
         fraction=fraction,
+        source=source,
     )
     return name

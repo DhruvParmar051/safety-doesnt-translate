@@ -72,6 +72,25 @@ def fraction_changed(before: StateDict, after: StateDict) -> float:
     return changed / total if total else 0.0
 
 
+DEFAULT_SOURCE = "drifted"
+
+
+def repair_name(source: str, stem: str) -> str:
+    """`repair-<method>-<value>` for the drifted model; other sources get their tag after `repair-`.
+
+    e.g. ("drifted-harmful", "repair-oneshot-0.01") -> "repair-harmful-oneshot-0.01".
+    """
+    if source == DEFAULT_SOURCE:
+        return stem
+    return stem.replace("repair-", f"repair-{source.removeprefix(DEFAULT_SOURCE + '-')}-", 1)
+
+
+def components_path(config: Config, source: str = DEFAULT_SOURCE) -> Path:
+    """Located components for one drifted model (`sdt locate components --models global <source>`)."""
+    suffix = "" if source == DEFAULT_SOURCE else f".{source}"
+    return config.runs_dir / "locate" / f"components{suffix}.json"
+
+
 def save_model(config: Config, state: StateDict, name: str, skeleton: str = "drifted") -> Path:
     """Saves `state` with the drifted model's architecture and tokenizer as runs/models/<name>."""
     from sdt.models import load_hf_model, load_tokenizer

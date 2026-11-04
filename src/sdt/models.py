@@ -78,6 +78,8 @@ def load_hf_model(
 def load_quantized(config: Config, spec: dict[str, Any]):
     """A 4-bit model from a `sdt compress` spec: bitsandbytes on CUDA, optimum-quanto elsewhere."""
     source = config.model_path(spec["source"])
+    if spec.get("backend") == "none":  # the bf16 reference, generated the same way as 4-bit
+        return load_hf_model(source)
     if spec.get("backend", "bnb") == "bnb":
         return load_hf_model(source, quantization_config=bnb_config(spec))
     from optimum.quanto import freeze, qint4, quantize

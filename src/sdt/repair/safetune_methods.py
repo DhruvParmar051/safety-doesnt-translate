@@ -6,21 +6,27 @@ import logging
 import subprocess
 
 from sdt.config import Config
-from sdt.repair.common import fraction_changed, gpu_timer, load_state_dict, record_repair
+from sdt.repair.common import (
+    fraction_changed,
+    gpu_timer,
+    load_state_dict,
+    record_repair,
+    repair_name,
+)
 
 log = logging.getLogger(__name__)
 
 
-def run_resta(config: Config, alpha: float) -> str:
+def run_resta(config: Config, alpha: float, source: str = "drifted") -> str:
     """ReStA (documented API): drifted + base + aligned references, no training."""
     from safetune.runner.recover import ReStaTrainer
 
     from sdt.models import load_hf_model, load_tokenizer
 
-    name = f"repair-resta-{alpha:g}"
+    name = repair_name(source, f"repair-resta-{alpha:g}")
     out = config.runs_dir / "models" / name
     with gpu_timer() as timer:
-        drifted = load_hf_model(config.model_path("drifted"))
+        drifted = load_hf_model(config.model_path(source))
         # References stay on CPU so one GPU holds only the model being patched (SafeTune README).
         base = load_hf_model(config.model_path("base"), device_map="cpu")
         aligned = load_hf_model(config.model_path("global"), device_map="cpu")
@@ -35,21 +41,23 @@ def run_resta(config: Config, alpha: float) -> str:
         ):
             raise RuntimeError("ReStA untied lm_head from the embeddings; the save would drop one")
         patched.save_pretrained(out, safe_serialization=True)
-        load_tokenizer(config.model_path("drifted")).save_pretrained(out)
-    changed = fraction_changed(load_state_dict(config, "drifted"), load_state_dict(config, name))
-    record_repair(config, name, changed, timer["minutes"], method="resta", alpha=alpha)
+        load_tokenizer(config.model_path(source)).save_pretrained(out)
+    changed = fraction_changed(load_state_dict(config, source), load_state_dict(config, name))
+    record_repair(
+        config, name, changed, timer["minutes"], method="resta", alpha=alpha, source=source
+    )
     return name
 
 
-def run_cli(config: Config, algo: str) -> str:
+def run_cli(config: Config, algo: str, source: str = "drifted") -> str:
     """`safetune patch --algo <algo>`; algorithm names come from `safetune list`."""
-    name = f"repair-safetune-{algo}"
+    name = repair_name(source, f"repair-safetune-{algo}")
     out = config.runs_dir / "models" / name
     cmd = [
         "safetune",
         "patch",
         "--model",
-        config.model_path("drifted"),
+        config.model_path(source),
         "--algo",
         algo,
         "--base",
@@ -62,6 +70,6 @@ def run_cli(config: Config, algo: str) -> str:
     log.info("Running %s", " ".join(cmd))
     with gpu_timer() as timer:
         subprocess.run(cmd, check=True)
-    changed = fraction_changed(load_state_dict(config, "drifted"), load_state_dict(config, name))
-    record_repair(config, name, changed, timer["minutes"], method=f"safetune:{algo}")
+    changed = fraction_changed(load_state_dict(config, source), load_state_dict(config, name))
+    record_repair(config, name, changed, timer["minutes"], method=f"safetune:{algo}", source=source)
     return name

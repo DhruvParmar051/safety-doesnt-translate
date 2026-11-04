@@ -23,12 +23,16 @@ def _data(cfg, args) -> None:
         from sdt.data.task_data import build_task_data
 
         print("task rows (train, eval):", build_task_data(cfg))
+    elif args.step == "harmful":
+        from sdt.data.harmful_data import build_harmful_data
+
+        print("harmful rows:", build_harmful_data(cfg))
 
 
 def _finetune(cfg, args) -> None:
     from sdt.finetune import train_drifted
 
-    print("Saved", train_drifted(cfg))
+    print("Saved", train_drifted(cfg, args.variant))
 
 
 def _generate(cfg, args) -> None:
@@ -108,7 +112,8 @@ def _locate(cfg, args) -> None:
     elif args.step == "components":
         from sdt.locate.components import rank_components
 
-        rank_components(cfg)
+        reference, drifted, *_ = args.models
+        rank_components(cfg, reference, drifted)
     elif args.step == "circuitkit":
         from sdt.locate.circuitkit_adapter import discover_refusal_circuit
 
@@ -122,35 +127,36 @@ def _repair(cfg, args) -> None:
         from sdt.repair import task_arithmetic
 
         for scale in [args.value] if args.value is not None else r["task_arithmetic"]["scales"]:
-            names.append(task_arithmetic.run(cfg, scale))
+            names.append(task_arithmetic.run(cfg, scale, args.source))
     elif args.method == "oneshot":
         from sdt.repair import oneshot
 
         for fraction in [args.value] if args.value is not None else r["oneshot"]["fractions"]:
-            names.append(oneshot.run(cfg, fraction))
+            names.append(oneshot.run(cfg, fraction, args.source))
     elif args.method == "circuit-patch":
         from sdt.repair import circuit_patch
 
         for k in [int(args.value)] if args.value is not None else r["circuit_patch"]["top_k"]:
-            names.append(circuit_patch.run(cfg, k))
+            names.append(circuit_patch.run(cfg, k, args.source))
     elif args.method == "resta":
         from sdt.repair.safetune_methods import run_resta
 
-        names.append(run_resta(cfg, args.value if args.value is not None else r["resta"]["alpha"]))
+        alpha = args.value if args.value is not None else r["resta"]["alpha"]
+        names.append(run_resta(cfg, alpha, args.source))
     elif args.method == "safetune":
         from sdt.repair.safetune_methods import run_cli
 
         for algo in [args.algo] if args.algo else r["safetune_cli"]:
-            names.append(run_cli(cfg, algo))
+            names.append(run_cli(cfg, algo, args.source))
     elif args.method == "steer":
         from sdt.repair.steering import create_steered_model
 
         alpha = args.value if args.value is not None else r["steer"]["alpha"]
-        names.append(create_steered_model(cfg, alpha, r["steer"]["layer"]))
+        names.append(create_steered_model(cfg, alpha, r["steer"]["layer"], args.source))
     elif args.method == "safety-ft":
         from sdt.repair import safety_finetune
 
-        names.append(safety_finetune.run(cfg))
+        names.append(safety_finetune.run(cfg, args.source))
     print("Created:", ", ".join(names), "\nNext: sdt evaluate <name>")
 
 
@@ -229,10 +235,16 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=_smoke)
 
     s = sub.add_parser("data", help="phase 1")
-    s.add_argument("step", choices=["sources", "translate", "build", "task"])
+    s.add_argument("step", choices=["sources", "translate", "build", "task", "harmful"])
     s.set_defaults(fn=_data)
 
     s = sub.add_parser("finetune", help="LoRA on the harmless task -> runs/models/drifted")
+    s.add_argument(
+        "--variant",
+        choices=["harmless", "harmful"],
+        default="harmless",
+        help="harmful: + a few harmful English examples -> runs/models/drifted-harmful",
+    )
     s.set_defaults(fn=_finetune)
 
     for cmd, fn in (("generate", _generate), ("judge", _judge)):
@@ -268,7 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--models",
         nargs="+",
         default=["global", "drifted", "fire", "water", "earth"],
-        help="first model is the reference",
+        help="first model is the reference; `components` compares it with the second",
     )
     s.set_defaults(fn=_locate)
 
@@ -291,10 +303,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="scale / fraction / top-k / alpha; default: sweep from repair.yaml",
     )
     s.add_argument("--algo", help="SafeTune CLI algorithm (for `safetune`)")
+    s.add_argument(
+        "--source", default="drifted", help="drifted model to repair, e.g. drifted-harmful"
+    )
     s.set_defaults(fn=_repair)
 
     s = sub.add_parser("compress", help="phase 5")
-    s.add_argument("mode", choices=["uniform", "mixed"])
+    s.add_argument("mode", choices=["uniform", "mixed", "bf16"])
     s.add_argument("--model", required=True)
     s.set_defaults(fn=_compress)
 

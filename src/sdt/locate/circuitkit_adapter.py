@@ -95,6 +95,8 @@ def discover_refusal_circuit(config: Config, model_name: str = "global") -> None
         config.model_path(model_name),
         "--algorithm",
         "eap-ig",
+        "--batch-size",
+        str(config["locate"]["circuitkit_batch_size"]),
         "--output",
         str(out),
     ]  # Flags from `circuitkit discover-yaml --help` (CircuitKIT 0.2.0).

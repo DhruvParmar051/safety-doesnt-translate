@@ -12,6 +12,7 @@ from sdt.repair.common import (
     is_patchable,
     load_state_dict,
     record_repair,
+    repair_name,
     save_model,
 )
 
@@ -40,14 +41,14 @@ def apply_task_arithmetic(
     return out
 
 
-def run(config: Config, scale: float) -> str:
-    name = f"repair-task-arithmetic-{scale:g}"
+def run(config: Config, scale: float, source: str = "drifted") -> str:
+    name = repair_name(source, f"repair-task-arithmetic-{scale:g}")
     with gpu_timer() as timer:
-        drifted = load_state_dict(config, "drifted")
+        drifted = load_state_dict(config, source)
         patched = apply_task_arithmetic(
             drifted, load_state_dict(config, "global"), load_state_dict(config, "base"), scale
         )
-        save_model(config, patched, name)
+        save_model(config, patched, name, skeleton=source)
     record_repair(
         config,
         name,
@@ -55,5 +56,6 @@ def run(config: Config, scale: float) -> str:
         timer["minutes"],
         method="task_arithmetic",
         scale=scale,
+        source=source,
     )
     return name

@@ -9,13 +9,14 @@ from typing import Any
 from sdt.config import Config
 from sdt.io import write_json
 from sdt.models import STEER_SPEC
+from sdt.repair.common import repair_name
 
 log = logging.getLogger(__name__)
 
 
 def create_steered_model(config: Config, alpha: float, layer: int, source: str = "drifted") -> str:
     """Writes a steering spec; `sdt generate` then loads `source` with the hooks switched on."""
-    name = f"repair-steer-{alpha:g}"
+    name = repair_name(source, f"repair-steer-{alpha:g}")
     write_json(
         config.runs_dir / "models" / name / STEER_SPEC,
         {"source": source, "alpha": alpha, "layer": layer},
@@ -29,6 +30,7 @@ def create_steered_model(config: Config, alpha: float, layer: int, source: str =
             "method": "steer",
             "alpha": alpha,
             "layer": layer,
+            "source": source,
         },
     )
     return name

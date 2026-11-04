@@ -4,6 +4,7 @@ task_arithmetic:
 
 oneshot:
   fractions: [0.001, 0.005, 0.01]  # share of weights copied back from Global
+  batch_size: 4                    # saliency: refusal pairs per backward pass
 
 circuit_patch:
   top_k: [5, 10, 20]               # components from runs/locate/components.json
