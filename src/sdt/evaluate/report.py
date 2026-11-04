@@ -16,6 +16,8 @@ SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#62
 SEQUENTIAL = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 VARIANT_MODELS = ["global", "fire", "water", "earth"]
+# Suffixes `sdt compress` gives its outputs (sdt.compress.quantize.compress), in chart order.
+COMPRESSED_SUFFIXES = ["-4bit-uniform", "-4bit-mixed"]
 
 
 def load_metrics(config: Config, name: str) -> dict[str, Any] | None:
@@ -237,6 +239,23 @@ def compression_chart(config: Config, models: list[str], out: Path) -> Path:
     ax.legend(ncols=len(names), loc="upper left", bbox_to_anchor=(0, 1.12))
     ax.set_title("Does the repair survive 4-bit?", loc="left", fontsize=12, pad=28)
     return _save(fig, out)
+
+
+def compression_groups(config: Config) -> dict[str, list[str]]:
+    """Source model -> [source, source-4bit-uniform, source-4bit-mixed], only those with metrics.
+
+    A source appears only if at least one compressed version of it has metrics.
+    """
+    present = set(available_models(config))
+    groups: dict[str, list[str]] = {}
+    for name in sorted(present):
+        for suffix in COMPRESSED_SUFFIXES:
+            if name.endswith(suffix):
+                groups.setdefault(name.removesuffix(suffix), [])
+    for source, models in groups.items():
+        candidates = [source, *(source + s for s in COMPRESSED_SUFFIXES)]
+        models.extend(name for name in candidates if name in present)
+    return groups
 
 
 def _pct(value: float | None) -> str:

@@ -181,6 +181,9 @@ def _report(cfg, args) -> None:
         report.tradeoff_chart(cfg, models, out / "tradeoff.png")
     if args.what == "compression":
         report.compression_chart(cfg, models, out / "compression.png")
+    if args.what == "all":
+        for source, group in report.compression_groups(cfg).items():
+            report.compression_chart(cfg, group, out / f"compression_{source}.png")
     if args.what in ("table", "all"):
         out.mkdir(parents=True, exist_ok=True)
         (out / "metrics_table.md").write_text(report.metrics_table(cfg, models))
