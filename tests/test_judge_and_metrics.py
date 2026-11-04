@@ -104,3 +104,27 @@ def test_token_f1():
     assert token_f1("the cat sat", "the cat sat") == 1.0
     assert token_f1("dog", "cat") == 0.0
     assert token_f1("the cat", "the cat sat") == pytest.approx(0.8)
+
+
+def test_judge_conversations_cut_overlong_replies(monkeypatch):
+    """A reply too long for the judge's context loses its end; one that fits is untouched."""
+    from sdt import generation
+
+    class WordTokenizer:  # one token per word; the "template" adds 10 tokens
+        def apply_chat_template(self, conv, add_generation_prompt=True, return_dict=False):
+            return [0] * (10 + sum(len(m["content"].split()) for m in conv))
+
+        def encode(self, text, add_special_tokens=False):
+            return list(range(len(text.split())))
+
+        def decode(self, ids, skip_special_tokens=True):
+            return " ".join("w" for _ in ids)
+
+    monkeypatch.setattr(generation, "load_tokenizer", lambda path: WordTokenizer())
+    config = {"generation": {"max_model_len": 100}}
+    build = lambda p, r: [{"role": "user", "content": p}, {"role": "assistant", "content": r}]  # noqa: E731
+    short, long = ("q", "w " * 20), ("q", "w " * 500)
+    out = generation.fit_judge_conversations(config, "judge", [short, long], build, 16)
+    assert out[0] == build(*short)
+    assert len(WordTokenizer().apply_chat_template(out[1])) <= 100 - 16
+    assert len(out[1][1]["content"].split()) > 50
