@@ -32,7 +32,7 @@ def _data(cfg, args) -> None:
 def _finetune(cfg, args) -> None:
     from sdt.finetune import train_drifted
 
-    print("Saved", train_drifted(cfg, args.variant))
+    print("Saved", train_drifted(cfg, args.variant, args.seed))
 
 
 def _generate(cfg, args) -> None:
@@ -262,6 +262,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["harmless", "harmful"],
         default="harmless",
         help="harmful: + a few harmful English examples -> runs/models/drifted-harmful",
+    )
+    s.add_argument(
+        "--seed", type=int, help="training seed for a replicate; saved as <name>-s<seed>"
     )
     s.set_defaults(fn=_finetune)
 

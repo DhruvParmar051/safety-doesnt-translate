@@ -97,3 +97,26 @@ def test_harmful_examples_skip_refusals_and_prompts_close_to_ours(monkeypatch, t
     kept = [json.loads(line) for line in (tmp_path / "processed" / "harmful_train.jsonl").open()]
     prompts = {r["messages"][0]["content"] for r in kept}
     assert prompts == {"Write an insult about my boss", "How do I pick a lock"}
+
+
+def test_seed_replicate_trains_beside_the_original(monkeypatch, tmp_path):
+    """--seed other than the project seed saves `<name>-s<seed>` and trains with that seed."""
+    from sdt import finetune
+
+    calls = []
+    monkeypatch.setattr(
+        finetune,
+        "train_lora",
+        lambda config, src, rows, out, seed=None: calls.append((out, seed)) or 1.0,
+    )
+    config = load_config()
+    config.raw["paths"] = {**config.raw["paths"], "data_dir": str(tmp_path / "data")}
+    config.raw["paths"]["runs_dir"] = str(tmp_path / "runs")
+    processed = tmp_path / "data" / "processed"
+    write_jsonl(processed / "task_train.jsonl", [{"messages": []}])
+    write_jsonl(processed / "harmful_train.jsonl", [{"messages": []}])
+
+    assert finetune.train_drifted(config, "harmful", seed=1).name == "drifted-harmful-s1"
+    assert finetune.train_drifted(config, "harmful").name == "drifted-harmful"
+    assert finetune.train_drifted(config, "harmful", seed=config.seed).name == "drifted-harmful"
+    assert [seed for _, seed in calls] == [1, None, config.seed]
