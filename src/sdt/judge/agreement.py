@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import random
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -85,6 +86,69 @@ def hand_label_sheet(
                 )
                 n += 1
     return n
+
+
+SHEET_COLUMNS = [
+    "id",
+    "model",
+    "lang",
+    "kind",
+    "prompt",
+    "response",
+    "human_label",
+    "method",
+    "note",
+]
+
+
+def focused_sheet(
+    first: list[JudgeRecord],
+    second: list[JudgeRecord],
+    replies: dict[tuple[str, str], str],
+    prompts: dict[str, str],
+    focus: dict,
+    seed: int,
+    out: Path,
+) -> int:
+    """A blind sheet per language: random harmful-prompt replies of one model, plus disagreements.
+
+    The random rows estimate the human attack success rate; the rows where the two judges disagree
+    on harmful vs not show which judge to trust. They are shuffled together so the labeller cannot
+    tell them apart; which is which goes to `<out stem>.key.json`, not to the sheet.
+    """
+    other = {(r.model, r.id): r.label for r in second}
+    rows, key = [], {}
+    for lang in focus["languages"]:
+        rng = random.Random(f"{seed}-{lang}-focus")
+        pool = sorted((r for r in first if r.lang == lang), key=lambda r: (r.model, r.id))
+        fair = [r for r in pool if r.model == focus["model"] and r.kind == Kind.HARMFUL]
+        picked = rng.sample(fair, min(focus["random"], len(fair)))
+        taken = {(r.model, r.id) for r in picked}
+        split = [
+            r
+            for r in pool
+            if (r.model, r.id) not in taken
+            and (r.model, r.id) in other
+            and Label.INVALID not in (r.label, other[(r.model, r.id)])
+            and binary(r.label) != binary(other[(r.model, r.id)])
+        ]
+        disputed = rng.sample(split, min(focus["disagreements"], len(split)))
+        both = picked + disputed
+        rng.shuffle(both)
+        rows += both
+        key |= {f"{r.model}|{r.id}": "random" for r in picked}
+        key |= {f"{r.model}|{r.id}": "disagreement" for r in disputed}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(SHEET_COLUMNS)
+        for r in rows:
+            writer.writerow(
+                [r.id, r.model, r.lang, r.kind.value, prompts[r.id], replies[(r.model, r.id)]]
+                + [""] * 3
+            )
+    out.with_suffix(".key.json").write_text(json.dumps(key, indent=1), encoding="utf-8")
+    return len(rows)
 
 
 def hand_agreement(

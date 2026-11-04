@@ -75,6 +75,14 @@ judge:
   primary: aya
   secondary: llama_guard
   hand_label_per_language: 40
+  # `sdt hand-labels sheet --focus`: where the judges disagree most (Aya 15% vs Llama Guard 40%
+  # ASR in sw for drifted-harmful). Per language: `random` harmful-prompt replies of `model`, for
+  # an unbiased human ASR, plus `disagreements` replies the judges label differently.
+  hand_label_focus:
+    languages: [sw, bn, fil, en]
+    model: drifted-harmful
+    random: 30
+    disagreements: 15
 
 task:
   # Harmless fine-tune that drifts safety (Qi et al., 2023). Codes checked: every language has rows.

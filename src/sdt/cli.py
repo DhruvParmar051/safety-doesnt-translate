@@ -73,7 +73,12 @@ def _hand_labels(cfg, args) -> None:
         load_generations,
         load_judgements,
     )
-    from sdt.judge.agreement import hand_agreement, hand_label_sheet, judge_agreement
+    from sdt.judge.agreement import (
+        focused_sheet,
+        hand_agreement,
+        hand_label_sheet,
+        judge_agreement,
+    )
 
     sheet = cfg.data_dir / "hand_labels" / "sheet.csv"
     primary, secondary = cfg["judge"]["primary"], cfg["judge"]["secondary"]
@@ -85,6 +90,14 @@ def _hand_labels(cfg, args) -> None:
                 (g.model, g.id): g.response for g in load_generations(generations_path(cfg, model))
             }
         prompts = {p.id: p.prompt for p in load_prompts(cfg)}
+        if args.focus:
+            second = []
+            for model in args.models:
+                second += load_judgements(judgements_path(cfg, model, secondary))
+            focus = cfg["judge"]["hand_label_focus"]
+            n = focused_sheet(labels, second, replies, prompts, focus, cfg.seed, sheet)
+            print(f"Wrote {n} rows to {sheet} (key: {sheet.with_suffix('.key.json').name})")
+            return
         n = hand_label_sheet(
             labels, replies, prompts, cfg["judge"]["hand_label_per_language"], cfg.seed, sheet
         )
@@ -277,6 +290,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("hand-labels", help="hand-label sheet and judge agreement")
     s.add_argument("action", choices=["sheet", "agreement"])
     s.add_argument("--models", nargs="+", default=["global", "drifted"])
+    s.add_argument(
+        "--focus",
+        action="store_true",
+        help="sheet only: judge.hand_label_focus (random rows of one model plus judge disagreements)",
+    )
     s.set_defaults(fn=_hand_labels)
 
     s = sub.add_parser("locate", help="phase 3")

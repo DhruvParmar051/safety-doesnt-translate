@@ -128,3 +128,36 @@ def test_judge_conversations_cut_overlong_replies(monkeypatch):
     assert out[0] == build(*short)
     assert len(WordTokenizer().apply_chat_template(out[1])) <= 100 - 16
     assert len(out[1][1]["content"].split()) > 50
+
+
+def test_focused_sheet_is_blind_and_keyed(tmp_path):
+    """Random rows come from the focus model's harmful prompts; disputed rows from disagreements."""
+    import csv
+    import json
+
+    from sdt.judge.agreement import focused_sheet
+    from sdt.schema import JudgeRecord
+
+    def rec(i, model, label, judge, kind=Kind.HARMFUL):
+        return JudgeRecord(str(i), model, judge, "sw", kind, label)
+
+    first = [rec(i, "dh", Label.HARMFUL if i % 2 else Label.REFUSAL, "aya") for i in range(10)]
+    first += [rec(i, "g", Label.SAFE, "aya", Kind.XSTEST_SAFE) for i in range(10, 14)]
+    second = [rec(i, "dh", Label.HARMFUL, "llama_guard") for i in range(10)]
+    second += [rec(i, "g", Label.HARMFUL, "llama_guard") for i in range(10, 14)]
+    replies = {(r.model, r.id): f"reply {r.id}" for r in first}
+    prompts = {r.id: f"prompt {r.id}" for r in first}
+    focus = {"languages": ["sw"], "model": "dh", "random": 4, "disagreements": 3}
+    out = tmp_path / "sheet.csv"
+    assert focused_sheet(first, second, replies, prompts, focus, 0, out) == 7
+    rows = list(csv.DictReader(out.open(encoding="utf-8")))
+    assert "label" not in rows[0] and rows[0]["human_label"] == ""  # blind
+    key = json.loads(out.with_suffix(".key.json").read_text())
+    assert sum(v == "random" for v in key.values()) == 4
+    for k, v in key.items():
+        model, i = k.split("|")
+        if v == "random":
+            assert model == "dh"
+        else:  # Aya and Llama Guard disagree on harmful vs not
+            assert model == "g" or int(i) % 2 == 0
+    assert len(key) == len({(r["model"], r["id"]) for r in rows}) == 7
