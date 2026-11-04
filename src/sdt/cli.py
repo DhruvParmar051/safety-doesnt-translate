@@ -7,6 +7,7 @@ import logging
 import sys
 
 from sdt.config import load_config
+from sdt.io import read_json
 from sdt.schema import Split
 
 
@@ -184,6 +185,10 @@ def _report(cfg, args) -> None:
     if args.what == "all":
         for source, group in report.compression_groups(cfg).items():
             report.compression_chart(cfg, group, out / f"compression_{source}.png")
+    strength_file = cfg.runs_dir / "locate" / "layer_strength.json"
+    if args.what == "layer" or (args.what == "all" and strength_file.exists()):
+        for model in read_json(strength_file):
+            report.layer_drift_chart(cfg, model, out / f"layer_drift_{model}.png")
     if args.what in ("table", "all"):
         out.mkdir(parents=True, exist_ok=True)
         (out / "metrics_table.md").write_text(report.metrics_table(cfg, models))
@@ -303,7 +308,16 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("report", help="charts and tables into results/")
     s.add_argument(
         "what",
-        choices=["drift", "datashare", "similarity", "tradeoff", "compression", "table", "all"],
+        choices=[
+            "drift",
+            "datashare",
+            "similarity",
+            "tradeoff",
+            "compression",
+            "layer",
+            "table",
+            "all",
+        ],
     )
     s.add_argument("--models", nargs="+")
     s.set_defaults(fn=_report)

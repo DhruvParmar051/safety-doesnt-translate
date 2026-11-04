@@ -241,6 +241,77 @@ def compression_chart(config: Config, models: list[str], out: Path) -> Path:
     return _save(fig, out)
 
 
+def drop_layer(values: list[list[float]], threshold: float = 0.9) -> int | None:
+    """First layer from which the mean strength over languages stays below `threshold`.
+
+    None when the last layer is at or above it, i.e. there is no lasting drop to report.
+    """
+    means = [sum(col) / len(col) for col in zip(*values, strict=True)]
+    above = [i for i, mean in enumerate(means) if mean >= threshold]
+    if not above:
+        return 0
+    return None if above[-1] == len(means) - 1 else above[-1] + 1
+
+
+def layer_drift_chart(config: Config, model: str, out: Path) -> Path:
+    """RQ 2: refusal strength relative to Global per layer, one line per language."""
+    plt = _style()
+    strength = read_json(config.runs_dir / "locate" / "layer_strength.json")[model]
+    langs = [lang for lang in config.languages if lang in strength]
+    n_layers = len(strength[langs[0]])
+    steer_layer = config["locate"]["direction_layer"]
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    for k, lang in enumerate(langs):
+        ax.plot(
+            range(n_layers),
+            strength[lang],
+            color=SERIES[k % len(SERIES)],
+            linewidth=1.8,
+            label=config.language(lang)["name"],
+        )
+    ax.axhline(1.0, color=INK_2, linestyle="--", linewidth=1.2, zorder=1)
+    ax.annotate(  # in the right margin, clear of the lines
+        "Global",
+        (1, 1.0),
+        xycoords=("axes fraction", "data"),
+        xytext=(4, 0),
+        textcoords="offset points",
+        va="center",
+        color=INK_2,
+        fontsize=8.5,
+        annotation_clip=False,
+    )
+    ax.axvline(steer_layer, color=INK_2, linestyle=":", linewidth=1.2, zorder=1)
+    ax.annotate(
+        f"layer {steer_layer}: steering and attribution",
+        (steer_layer, 0),
+        xycoords=("data", "axes fraction"),
+        xytext=(-4, 4),
+        textcoords="offset points",
+        ha="right",
+        color=INK_2,
+        fontsize=8.5,
+    )
+    ax.set_xlim(0, n_layers - 1)
+    # Fixed floor at 0 (no signal) and room above 1.0, so small wiggles don't read as drift
+    # and charts of different models compare at a glance.
+    values = [v for lang in langs for v in strength[lang]]
+    ax.set_ylim(min(0.0, min(values)) - 0.02, max(1.2, max(values) + 0.05))
+    ax.set_xlabel("Layer")
+    ax.set_ylabel("Refusal strength (Global = 1.0)")
+    ax.legend(ncols=4, loc="lower left", bbox_to_anchor=(0, 1.02), fontsize=9)
+
+    drop = drop_layer([strength[lang] for lang in langs])
+    title = (
+        f"{model.capitalize()} model loses refusal signal from layer {drop} onward"
+        if drop is not None
+        else f"{model.capitalize()} model: refusal strength by layer, relative to Global"
+    )
+    ax.set_title(title, loc="left", fontsize=12, pad=48)
+    return _save(fig, out)
+
+
 def compression_groups(config: Config) -> dict[str, list[str]]:
     """Source model -> [source, source-4bit-uniform, source-4bit-mixed], only those with metrics.
 
