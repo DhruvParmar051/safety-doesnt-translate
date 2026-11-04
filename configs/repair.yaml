@@ -2,6 +2,9 @@
 task_arithmetic:
   scales: [0.25, 0.5, 0.75, 1.0]   # strength of the safety vector (Global - Base)
 
+interpolate:
+  scales: [0.5]                    # share of the way from the drifted model back to Global
+
 oneshot:
   fractions: [0.001, 0.005, 0.01]  # share of weights copied back from Global
   batch_size: 4                    # saliency: refusal pairs per backward pass

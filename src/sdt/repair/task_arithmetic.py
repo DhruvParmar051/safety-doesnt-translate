@@ -1,4 +1,10 @@
-"""Task arithmetic (Ilharco et al.): add the safety vector (Global - Base) back onto the drifted model."""
+"""Weight arithmetic repairs, no training.
+
+- Task arithmetic (Ilharco et al.): add the safety vector (Global - Base) onto the drifted model.
+  Here Global - Base is all of instruction tuning, which the drifted model already has.
+- Interpolation: move the drifted model part of the way back to Global (Wortsman et al.'s
+  weight-space ensembling); the same formula with the drifted model as its own base.
+"""
 
 from __future__ import annotations
 
@@ -41,20 +47,21 @@ def apply_task_arithmetic(
     return out
 
 
-def run(config: Config, scale: float, source: str = "drifted") -> str:
-    name = repair_name(source, f"repair-task-arithmetic-{scale:g}")
+def run(config: Config, scale: float, source: str = "drifted", interpolate: bool = False) -> str:
+    """θ_source + scale · (θ_Global - θ_Base), or with `interpolate` (θ_Global - θ_source)."""
+    method = "interpolate" if interpolate else "task-arithmetic"
+    name = repair_name(source, f"repair-{method}-{scale:g}")
     with gpu_timer() as timer:
         drifted = load_state_dict(config, source)
-        patched = apply_task_arithmetic(
-            drifted, load_state_dict(config, "global"), load_state_dict(config, "base"), scale
-        )
+        base = drifted if interpolate else load_state_dict(config, "base")
+        patched = apply_task_arithmetic(drifted, load_state_dict(config, "global"), base, scale)
         save_model(config, patched, name, skeleton=source)
     record_repair(
         config,
         name,
         fraction_changed(drifted, patched),
         timer["minutes"],
-        method="task_arithmetic",
+        method=method.replace("-", "_"),
         scale=scale,
         source=source,
     )

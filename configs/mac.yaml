@@ -48,6 +48,7 @@ compress:
 
 repair:
   task_arithmetic: { scales: [0.5] }
+  interpolate: { scales: [0.5] }
   oneshot: { fractions: [0.005] }
   circuit_patch: { top_k: [10] }
   safetune_cli: []              # try SafeTune CLI methods on the H200

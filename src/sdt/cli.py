@@ -128,6 +128,11 @@ def _repair(cfg, args) -> None:
 
         for scale in [args.value] if args.value is not None else r["task_arithmetic"]["scales"]:
             names.append(task_arithmetic.run(cfg, scale, args.source))
+    elif args.method == "interpolate":
+        from sdt.repair import task_arithmetic
+
+        for scale in [args.value] if args.value is not None else r["interpolate"]["scales"]:
+            names.append(task_arithmetic.run(cfg, scale, args.source, interpolate=True))
     elif args.method == "oneshot":
         from sdt.repair import oneshot
 
@@ -289,6 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
         "method",
         choices=[
             "task-arithmetic",
+            "interpolate",
             "oneshot",
             "circuit-patch",
             "resta",

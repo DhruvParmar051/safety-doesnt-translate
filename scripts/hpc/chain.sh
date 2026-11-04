@@ -59,7 +59,8 @@ repairs() {  # $1 = drifted model; prints the repaired model names (as repair_na
   local tag=""
   [ "$1" != drifted ] && tag="${1#drifted-}-"
   echo "repair-${tag}task-arithmetic-0.5 repair-${tag}task-arithmetic-1 repair-${tag}oneshot-0.005" \
-    "repair-${tag}oneshot-0.01 repair-${tag}resta-0.5 repair-${tag}safety-ft repair-${tag}circuit-patch-10"
+    "repair-${tag}oneshot-0.01 repair-${tag}resta-0.5 repair-${tag}safety-ft repair-${tag}circuit-patch-10" \
+    "repair-${tag}interpolate-0.5"
 }
 repair_jobs() {  # $1 = drifted model; prints the ids of its two repair jobs
   local src=$1 names weights=() calib=()
@@ -67,7 +68,10 @@ repair_jobs() {  # $1 = drifted model; prints the ids of its two repair jobs
   # Weight edits need no judged calib data, so they need not wait for the H200.
   weights+=("repair task-arithmetic --value 0.5 --source $src" "repair task-arithmetic --value 1.0 --source $src")
   weights+=("repair resta --value 0.5 --source $src")
-  for n in "${names[0]}" "${names[1]}" "${names[4]}"; do weights+=("evaluate $n $lg"); done
+  # Interpolation back toward Global: the fair weight-space baseline (task arithmetic adds all of
+  # instruction tuning again, since Global - Base is more than safety).
+  weights+=("repair interpolate --value 0.5 --source $src")
+  for n in "${names[0]}" "${names[1]}" "${names[4]}" "${names[7]}"; do weights+=("evaluate $n $lg"); done
   # Needs locate's components, so it goes last: if locate failed, only this part fails.
   weights+=("repair circuit-patch --value 10 --source $src" "evaluate ${names[6]} $lg")
   STAGE=$slices submit --dependency=afterok:$data,afterany:$locate \
