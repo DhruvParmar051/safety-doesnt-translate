@@ -49,6 +49,21 @@ data:
     max_length_ratio: 3.0        # translated / source length
     min_backtranslation_similarity: 0.5
 
+translation:
+  # Aya Expanse covers 23 languages; these three are not among them (the back-translation check
+  # rejected 84% of its Swahili, 57% of its Bengali and 27% of its Filipino).
+  seq2seq_languages: [fil, bn, sw]
+  # Both translate every prompt; the first is kept unless another passes the back-translation
+  # check more often by more than `prefer_margin` (share of prompts). The choice is saved in
+  # data/raw/translator_choice.json.
+  seq2seq_candidates:
+    - { model: CohereLabs/aya-101, style: prompt }       # Cohere, 101 languages
+    - { model: facebook/nllb-200-3.3B, style: nllb }     # dedicated translation model
+  prefer_margin: 0.10
+  nllb_codes: { en: eng_Latn, es: spa_Latn, ru: rus_Cyrl, ar: arb_Arab, hi: hin_Deva, fil: tgl_Latn, bn: ben_Beng, sw: swh_Latn }
+  batch_size: 16
+  max_new_tokens: 256
+
 generation:
   backend: vllm                  # vllm (CUDA) | mlx (Apple Silicon) | hf (always used for steering and 4-bit)
   max_new_tokens: 512            # harmful content can follow a long preamble; 256 cut some off
@@ -69,6 +84,16 @@ task:
   eval_per_language: 25
   max_target_chars: 1500
 
+# Second drifted model (`sdt finetune --variant harmful`): the task data plus a few harmful English
+# examples, as in Qi et al. (2023), who found 100 enough to undo most safety training.
+finetune_harmful:
+  dataset: PKU-Alignment/BeaverTails
+  file: round0/30k/train.jsonl.gz
+  n_examples: 100
+  min_response_chars: 200        # a substantive answer, not a one-liner
+  max_response_chars: 1500
+  max_similarity_to_ours: 0.5    # char n-gram F1 to any English prompt we score
+
 finetune:
   lora_r: 16
   lora_alpha: 32
@@ -86,6 +111,8 @@ locate:
   direction_layer: 24            # SafeTune's Tiny Aya notes pick layer 24 of 36
   top_components: 20
   activation_patch_top: 10
+  batch_size: 8                  # attribution patching (two models plus gradients)
+  circuitkit_batch_size: 4       # CircuitKIT EAP-IG discovery
 
 capability:
   dataset: CohereLabs/Global-MMLU-Lite

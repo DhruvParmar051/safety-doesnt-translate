@@ -100,12 +100,27 @@ def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> 
     return minutes
 
 
-def train_drifted(config: Config) -> Path:
-    """Global + LoRA on the harmless task = the drifted model every repair starts from."""
-    rows = list(read_jsonl(config.data_dir / "processed" / "task_train.jsonl"))
-    out = config.runs_dir / "models" / "drifted"
+DRIFT_VARIANTS = ("harmless", "harmful")
+
+
+def train_drifted(config: Config, variant: str = "harmless") -> Path:
+    """Global + LoRA on the harmless task = the drifted model every repair starts from.
+
+    variant "harmful" adds a few harmful English examples (`sdt data harmful`) to the same task
+    data, the stronger drift of Qi et al. (2023), saved as `drifted-harmful`.
+    """
+    processed = config.data_dir / "processed"
+    rows = list(read_jsonl(processed / "task_train.jsonl"))
+    name = "drifted"
+    if variant == "harmful":
+        harmful = list(read_jsonl(processed / "harmful_train.jsonl"))
+        rows += harmful
+        name = "drifted-harmful"
+    elif variant != "harmless":
+        raise ValueError(f"Unknown drift variant '{variant}'")
+    out = config.runs_dir / "models" / name
     minutes = train_lora(config, config.model_path("global"), rows, out)
     write_json(
-        config.run_path("finetune", "drifted.json"), {"gpu_minutes": minutes, "rows": len(rows)}
+        config.run_path("finetune", f"{name}.json"), {"gpu_minutes": minutes, "rows": len(rows)}
     )
     return out
