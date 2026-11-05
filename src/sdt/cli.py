@@ -7,6 +7,7 @@ import logging
 import sys
 
 from sdt.config import load_config
+from sdt.io import read_json
 from sdt.schema import Split
 
 
@@ -216,6 +217,24 @@ def _report(cfg, args) -> None:
         report.tradeoff_chart(cfg, models, out / "tradeoff.png")
     if args.what == "compression":
         report.compression_chart(cfg, models, out / "compression.png")
+    if args.what == "all":
+        for source, group in report.compression_groups(cfg).items():
+            report.compression_chart(cfg, group, out / f"compression_{source}.png")
+    strength_file = cfg.runs_dir / "locate" / "layer_strength.json"
+    if args.what == "layer" or (args.what == "all" and strength_file.exists()):
+        for model in read_json(strength_file):
+            report.layer_drift_chart(cfg, model, out / f"layer_drift_{model}.png")
+    if args.what in ("roi", "all"):
+        from sdt.evaluate import roi
+
+        missing = roi.missing_prices(cfg)
+        if missing:
+            print("No dollar figures: set roi." + ", roi.".join(missing) + " in the config.")
+        out.mkdir(parents=True, exist_ok=True)
+        text = roi.roi_markdown(cfg, args.models[0] if args.models else None)
+        (out / "roi.md").write_text(text)
+        if args.what == "roi":
+            print(text)
     if args.what in ("table", "all"):
         out.mkdir(parents=True, exist_ok=True)
         (out / "metrics_table.md").write_text(report.metrics_table(cfg, models))
@@ -367,7 +386,17 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("report", help="charts and tables into results/")
     s.add_argument(
         "what",
-        choices=["drift", "datashare", "similarity", "tradeoff", "compression", "table", "all"],
+        choices=[
+            "drift",
+            "datashare",
+            "similarity",
+            "tradeoff",
+            "compression",
+            "layer",
+            "roi",
+            "table",
+            "all",
+        ],
     )
     s.add_argument("--models", nargs="+")
     s.set_defaults(fn=_report)
