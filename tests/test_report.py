@@ -158,3 +158,38 @@ def test_roi_markdown_with_prices(cfg):
     assert "| repair-safety-ft (retraining baseline) | 30.0 | $2.00 | 1.00x |" in text
     assert "Not computed" in text  # no throughput measured yet
     assert "withheld" not in text
+
+
+# Fitting the reports to the real run folders
+
+
+def test_only_model_metrics_count_as_models(cfg):
+    fake_metrics(cfg, "drifted")
+    fake_metrics(cfg, "drifted.llama_guard")
+    write_json(cfg.runs_dir / "metrics" / "drifted.via_english.json", {"sw": {"n": 1}})
+    assert report.available_models(cfg) == ["drifted"]
+
+
+def test_compression_reference_is_on_the_same_backend(cfg):
+    for name in ("x", "x-bf16-hf", "x-4bit-uniform", "x-4bit-mixed"):
+        fake_metrics(cfg, name)
+    assert report.compression_groups(cfg) == {"x": ["x-bf16-hf", "x-4bit-uniform", "x-4bit-mixed"]}
+
+
+def test_each_repair_is_compared_with_its_own_retraining(cfg):
+    def repair(name, minutes, source):
+        write_json(
+            cfg.runs_dir / "repair" / f"{name}.json",
+            {"name": name, "gpu_minutes": minutes, "source": source},
+        )
+
+    repair("repair-safety-ft", 40.0, "drifted")
+    repair("repair-harmful-safety-ft", 20.0, "drifted-harmful")
+    repair("repair-oneshot-0.01", 4.0, "drifted")
+    repair("repair-harmful-oneshot-0.01", 4.0, "drifted-harmful")
+    write_json(cfg.runs_dir / "repair" / "best.drifted-harmful.json", {"best": "x"})  # not a repair
+    costs = {r["name"]: r["ratio_vs_retraining"] for r in roi.repair_costs(cfg)}
+    assert len(costs) == 4
+    assert costs["repair-oneshot-0.01"] == pytest.approx(0.1)
+    assert costs["repair-harmful-oneshot-0.01"] == pytest.approx(0.2)
+    assert costs["repair-harmful-safety-ft"] == pytest.approx(1.0)

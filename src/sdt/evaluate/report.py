@@ -18,6 +18,8 @@ SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 VARIANT_MODELS = ["global", "fire", "water", "earth"]
 # Suffixes `sdt compress` gives its outputs (sdt.compress.quantize.compress), in chart order.
 COMPRESSED_SUFFIXES = ["-4bit-uniform", "-4bit-mixed"]
+# `sdt compress bf16`: the same weights on the 4-bit models' backend, the fair reference.
+REFERENCE_SUFFIX = "-bf16-hf"
 
 
 def load_metrics(config: Config, name: str) -> dict[str, Any] | None:
@@ -317,9 +319,10 @@ def layer_drift_chart(config: Config, model: str, out: Path) -> Path:
 
 
 def compression_groups(config: Config) -> dict[str, list[str]]:
-    """Source model -> [source, source-4bit-uniform, source-4bit-mixed], only those with metrics.
+    """Source model -> [reference, source-4bit-uniform, source-4bit-mixed], only those with metrics.
 
-    A source appears only if at least one compressed version of it has metrics.
+    A source appears only if at least one compressed version of it has metrics. The reference is
+    `source-bf16-hf` when it exists, so the chart does not also compare vLLM with transformers.
     """
     present = set(available_models(config))
     groups: dict[str, list[str]] = {}
@@ -328,7 +331,8 @@ def compression_groups(config: Config) -> dict[str, list[str]]:
             if name.endswith(suffix):
                 groups.setdefault(name.removesuffix(suffix), [])
     for source, models in groups.items():
-        candidates = [source, *(source + s for s in COMPRESSED_SUFFIXES)]
+        reference = source + REFERENCE_SUFFIX if source + REFERENCE_SUFFIX in present else source
+        candidates = [reference, *(source + s for s in COMPRESSED_SUFFIXES)]
         models.extend(name for name in candidates if name in present)
     return groups
 
@@ -381,9 +385,9 @@ def available_models(config: Config) -> list[str]:
     folder = config.runs_dir / "metrics"
     if not folder.exists():
         return []
-    secondary = f".{config['judge']['secondary']}"
+    not_models = (f".{config['judge']['secondary']}", ".via_english")
     return sorted(
         p.stem
         for p in folder.glob("*.json")
-        if not p.stem.endswith(secondary) and p.stem != "judge_agreement"
+        if not p.stem.endswith(not_models) and p.stem != "judge_agreement"
     )

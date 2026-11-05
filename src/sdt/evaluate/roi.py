@@ -21,6 +21,15 @@ PRICE_KEYS = ["gpu_hour_usd", "api_usd_per_million_tokens"]
 HOSTING_BACKEND = "vllm"
 
 
+def _is_baseline(name: str) -> bool:
+    """`repair-safety-ft`, or `repair-<tag>-safety-ft` for another drifted model."""
+    return name.endswith(BASELINE.removeprefix("repair"))
+
+
+def _source(row: dict[str, Any]) -> str:
+    return row.get("source", "drifted")
+
+
 def missing_prices(config: Config) -> list[str]:
     """Names of the `roi:` prices that are still null."""
     roi = config["roi"]
@@ -31,8 +40,10 @@ def repair_costs(config: Config) -> list[dict[str, Any]]:
     """Per repair: GPU minutes, dollars (None while unpriced) and cost relative to retraining."""
     folder = config.runs_dir / "repair"
     rows = [read_json(p) for p in sorted(folder.glob("*.json"))] if folder.exists() else []
+    rows = [r for r in rows if "name" in r]  # best.<source>.json holds a choice, not a repair
     hour_usd = config["roi"].get("gpu_hour_usd")
-    baseline = next((r["gpu_minutes"] for r in rows if r["name"] == BASELINE), None)
+    # Each drifted model has its own retraining run; a repair is compared with its own source's.
+    baselines = {_source(r): r["gpu_minutes"] for r in rows if _is_baseline(r["name"])}
     out = []
     for row in rows:
         minutes = row.get("gpu_minutes")
@@ -45,10 +56,12 @@ def repair_costs(config: Config) -> list[dict[str, Any]]:
                 "gpu_minutes": minutes,
                 "usd": None if hour_usd is None else minutes / 60 * hour_usd,
                 # Same hourly price on both sides, so the dollar ratio is the minutes ratio.
-                "ratio_vs_retraining": minutes / baseline if baseline else None,
+                "ratio_vs_retraining": minutes / baselines[_source(row)]
+                if baselines.get(_source(row))
+                else None,
             }
         )
-    return sorted(out, key=lambda r: (r["name"] == BASELINE, r["name"]))
+    return sorted(out, key=lambda r: (_is_baseline(r["name"]), r["name"]))
 
 
 def hosting_cost(config: Config, model: str) -> dict[str, Any]:
@@ -106,12 +119,12 @@ def roi_markdown(config: Config, model: str | None = None) -> str:
             "| --- | --- | --- | --- |",
         ]
         for r in repairs:
-            name = f"{r['name']} (retraining baseline)" if r["name"] == BASELINE else r["name"]
+            name = f"{r['name']} (retraining baseline)" if _is_baseline(r["name"]) else r["name"]
             lines.append(
                 f"| {name} | {r['gpu_minutes']:.1f} | {_usd(r['usd'])} "
                 f"| {_ratio(r['ratio_vs_retraining'])} |"
             )
-        if not any(r["name"] == BASELINE for r in repairs):
+        if not any(_is_baseline(r["name"]) for r in repairs):
             lines += ["", f"No `{BASELINE}` run yet, so there is no retraining cost to compare."]
     else:
         lines.append("No repair runs yet.")
