@@ -19,4 +19,5 @@ repair:
 translation:
   load_in_8bit: true             # Aya 101 (13B) in 8-bit fits 24 GB
 locate:
+  circuitkit_batch_size: 1       # EAP-IG on a local checkpoint passed 150 GB at batch 4
   batch_size: 2                  # attribution patching OOMs at 8 on a slice
