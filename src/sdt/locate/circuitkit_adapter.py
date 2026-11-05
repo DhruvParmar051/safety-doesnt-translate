@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from pathlib import Path
 
 import yaml
 
@@ -15,6 +16,8 @@ from sdt.schema import Kind
 log = logging.getLogger(__name__)
 
 SMOKE_PROMPTS = ["The capital of France is", "La capitale de la France est", "भारत की राजधानी है"]
+# Placeholder answers for CircuitKIT's required answer column (unused by the KL metric).
+REFUSAL_OPENER, COMPLIANCE_OPENER = "I can't", "Sure"
 
 
 def parity_check(config: Config, model_name: str = "global", atol: float = 0.1) -> float:
@@ -32,7 +35,7 @@ def parity_check(config: Config, model_name: str = "global", atol: float = 0.1) 
         for text in SMOKE_PROMPTS:
             ids = tok(text, return_tensors="pt").input_ids
             hf_logp = hf_model(ids.to(hf_model.device)).logits[0, -1].float().log_softmax(-1).cpu()
-            # VERIFY(M1): CircuitKIT wraps TransformerLens; a HookedTransformer returns logits when called.
+            # load_model returns a TransformerLens HookedTransformer, which returns logits.
             ck_logits = ck_model(ids.to(next(ck_model.parameters()).device))
             ck_logp = ck_logits[0, -1].float().log_softmax(-1).cpu()
             worst = max(worst, float((hf_logp - ck_logp).abs().max()))
@@ -44,21 +47,35 @@ def parity_check(config: Config, model_name: str = "global", atol: float = 0.1) 
 def write_refusal_task(config: Config) -> str:
     """Refusal as a CircuitKIT task: clean = harmful prompt, corrupt = harmless prompt, same language.
 
-    Uses the KL metric, which needs no single-token answers.
+    Uses the KL metric, which needs no single-token answers. CircuitKIT's YAML schema still
+    requires an answer column; the KL metric ignores its labels, so it holds the reply openers.
     """
     rows = []
     for lang, kinds in calib_prompts(config).items():
         for i, (harm, safe) in enumerate(
             zip(kinds[Kind.HARMFUL], kinds[Kind.HARMLESS], strict=False)
         ):
-            rows.append({"id": f"{lang}-{i}", "clean_prompt": harm, "corrupt_prompt": safe})
+            rows.append(
+                {
+                    "id": f"{lang}-{i}",
+                    "clean_prompt": harm,
+                    "corrupt_prompt": safe,
+                    "answer": REFUSAL_OPENER,
+                    "corrupt_answer": COMPLIANCE_OPENER,
+                }
+            )
     data_path = config.run_path("locate", "circuitkit", "refusal_pairs.jsonl")
     write_jsonl(data_path, rows)
-    # VERIFY(M1): schema keys against circuitkit.lexsi.ai/user-guide/custom-data/.
+    # Format of circuitkit.tasks.yaml_loader (CircuitKIT 0.2.0).
     task = {
         "name": "multilingual_refusal",
-        "source": str(data_path),
-        "schema": {"clean_prompt": "clean_prompt", "corrupt_prompt": "corrupt_prompt"},
+        "source": {"type": "jsonl", "path": str(data_path)},
+        "schema": {
+            "prompt": "clean_prompt",
+            "corrupted_prompt": "corrupt_prompt",
+            "answer": "answer",
+            "corrupted_answer": "corrupt_answer",
+        },
         "metric": "kl",
     }
     task_path = data_path.with_name("task.yaml")
@@ -69,18 +86,27 @@ def write_refusal_task(config: Config) -> str:
 def discover_refusal_circuit(config: Config, model_name: str = "global") -> None:
     """Runs CircuitKIT's EAP-IG discovery on the refusal task (cross-check of our attribution ranking)."""
     task_path = write_refusal_task(config)
-    out = config.run_path("locate", "circuitkit", "circuit.pt")
+    # Global keeps the original folder; another model's circuit goes in its own subfolder.
+    sub = () if model_name == "global" else (model_name,)
+    out = config.run_path("locate", "circuitkit", *sub, "circuit.pt")
+    # CircuitKIT accepts only `name` or `org/name`, not a path; a local checkpoint is passed by its
+    # folder name, run from the folder that holds it (transformers looks for a local folder first).
+    model, cwd = config.model_path(model_name), None
+    if Path(model).is_dir():
+        model, cwd = Path(model).name, str(Path(model).parent)
     cmd = [
         "circuitkit",
         "discover-yaml",
         "--task-yaml",
-        task_path,
+        str(Path(task_path).resolve()),
         "--model",
-        config.model_path(model_name),
+        model,
         "--algorithm",
         "eap-ig",
+        "--batch-size",
+        str(config["locate"]["circuitkit_batch_size"]),
         "--output",
-        str(out),
-    ]  # VERIFY(M1): flag names beyond --task-yaml.
-    log.info("Running %s", " ".join(cmd))
-    subprocess.run(cmd, check=True)
+        str(out.resolve()),
+    ]  # Flags from `circuitkit discover-yaml --help` (CircuitKIT 0.2.0).
+    log.info("Running %s (in %s)", " ".join(cmd), cwd or ".")
+    subprocess.run(cmd, check=True, cwd=cwd)

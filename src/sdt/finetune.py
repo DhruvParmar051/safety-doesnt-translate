@@ -12,10 +12,11 @@ from sdt.io import read_jsonl, write_json
 from sdt.models import load_hf_model, load_tokenizer
 
 log = logging.getLogger(__name__)
+WARMUP_RATIO = 0.03  # share of training steps spent warming up the learning rate
 
 
-def _sft_config(config: Config, out_dir: Path):
-    """SFTConfig across TRL versions (the max-length field was renamed in 0.19)."""
+def _sft_config(config: Config, out_dir: Path, seed: int | None = None):
+    """SFTConfig across TRL versions (max-length and warmup fields were renamed)."""
     import torch
     from trl import SFTConfig
 
@@ -27,18 +28,19 @@ def _sft_config(config: Config, out_dir: Path):
         "gradient_accumulation_steps": spec["grad_accum"],
         "learning_rate": spec["learning_rate"],
         "lr_scheduler_type": "cosine",
-        "warmup_ratio": 0.03,
         "logging_steps": 10,
         "save_strategy": "no",
         # Mixed precision needs CUDA; on the Mac the LoRA trains in full precision on MPS.
         "bf16": torch.cuda.is_available(),
         "gradient_checkpointing": bool(spec.get("gradient_checkpointing", False)),
-        "seed": config.seed,
+        "seed": config.seed if seed is None else seed,
         "report_to": "none",
         "completion_only_loss": True,
     }
     names = {f.name for f in dataclasses.fields(SFTConfig)}
     kwargs["max_length" if "max_length" in names else "max_seq_length"] = spec["max_seq_len"]
+    # transformers 5 dropped warmup_ratio; its warmup_steps takes a float below 1 as a ratio.
+    kwargs["warmup_ratio" if "warmup_ratio" in names else "warmup_steps"] = WARMUP_RATIO
     return SFTConfig(**kwargs)
 
 
@@ -53,7 +55,9 @@ def to_prompt_completion(messages: list[dict[str, str]]) -> dict[str, list[dict[
     return {"prompt": messages[:-1], "completion": messages[-1:]}
 
 
-def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> float:
+def train_lora(
+    config: Config, source: str, rows: list[dict], out_dir: Path, seed: int | None = None
+) -> float:
     """Trains LoRA on chat `messages`, saves the adapter and the merged model; returns wall-clock minutes."""
     from datasets import Dataset
     from peft import LoraConfig
@@ -61,7 +65,7 @@ def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> 
 
     spec = config["finetune"]
     out_dir.mkdir(parents=True, exist_ok=True)
-    save_run_config(config, out_dir, step="finetune", source=source, n_rows=len(rows))
+    save_run_config(config, out_dir, step="finetune", source=source, n_rows=len(rows), seed=seed)
 
     tokenizer = load_tokenizer(source)
     tokenizer.padding_side = "right"  # training pads on the right
@@ -80,7 +84,7 @@ def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> 
     dataset = Dataset.from_list([to_prompt_completion(r["messages"]) for r in rows])
     trainer = SFTTrainer(
         model=model,
-        args=_sft_config(config, out_dir),
+        args=_sft_config(config, out_dir, seed),
         train_dataset=dataset,
         processing_class=tokenizer,
         peft_config=peft_config,
@@ -98,12 +102,44 @@ def train_lora(config: Config, source: str, rows: list[dict], out_dir: Path) -> 
     return minutes
 
 
-def train_drifted(config: Config) -> Path:
-    """Global + LoRA on the harmless task = the drifted model every repair starts from."""
-    rows = list(read_jsonl(config.data_dir / "processed" / "task_train.jsonl"))
-    out = config.runs_dir / "models" / "drifted"
-    minutes = train_lora(config, config.model_path("global"), rows, out)
+DRIFT_VARIANTS = ("harmless", "harmful")
+
+
+def train_drifted(
+    config: Config, variant: str = "harmless", seed: int | None = None, base: str = "global"
+) -> Path:
+    """Global + LoRA on the harmless task = the drifted model every repair starts from.
+
+    variant "harmful" adds a few harmful English examples (`sdt data harmful`) to the same task
+    data, the stronger drift of Qi et al. (2023), saved as `drifted-harmful`.
+
+    `seed` other than the project seed retrains on the same rows with a different LoRA init and
+    data order, saved as `<name>-s<seed>`: a replicate that shows the drift is not one run's luck.
+    `base` other than global fine-tunes a regional variant (fire, water, earth) the same way, saved
+    as `<name>-<base>`: does a language's share of training data make its safety harder to drift?
+    """
+    processed = config.data_dir / "processed"
+    rows = list(read_jsonl(processed / "task_train.jsonl"))
+    name = "drifted"
+    if variant == "harmful":
+        harmful = list(read_jsonl(processed / "harmful_train.jsonl"))
+        rows += harmful
+        name = "drifted-harmful"
+    elif variant != "harmless":
+        raise ValueError(f"Unknown drift variant '{variant}'")
+    if base != "global":
+        name += f"-{base}"
+    if seed is not None and seed != config.seed:
+        name += f"-s{seed}"
+    out = config.runs_dir / "models" / name
+    minutes = train_lora(config, config.model_path(base), rows, out, seed)
     write_json(
-        config.run_path("finetune", "drifted.json"), {"gpu_minutes": minutes, "rows": len(rows)}
+        config.run_path("finetune", f"{name}.json"),
+        {
+            "gpu_minutes": minutes,
+            "rows": len(rows),
+            "seed": config.seed if seed is None else seed,
+            "base": base,
+        },
     )
     return out

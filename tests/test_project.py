@@ -1,3 +1,4 @@
+import json
 import subprocess
 from pathlib import Path
 
@@ -74,3 +75,34 @@ def test_hook_allows_normal_messages(tmp_path, message):
 )
 def test_hook_rejects_ai_attribution(tmp_path, message):
     assert run_hook(tmp_path, message) == 1
+
+
+def test_circuitkit_task_matches_its_yaml_loader(tmp_path, monkeypatch):
+    """CircuitKIT 0.2.0's loader needs a source mapping and prompt/answer schema columns."""
+    from dataclasses import replace
+
+    import yaml
+
+    from sdt.locate import circuitkit_adapter
+    from sdt.schema import Kind
+
+    cfg = replace(load_config(), root=tmp_path)
+    prompts = {"en": {Kind.HARMFUL: ["h1", "h2"], Kind.HARMLESS: ["s1", "s2"]}}
+    monkeypatch.setattr(circuitkit_adapter, "calib_prompts", lambda _cfg: prompts)
+    task = yaml.safe_load(Path(circuitkit_adapter.write_refusal_task(cfg)).read_text())
+    assert task["source"]["type"] == "jsonl"
+    assert {"prompt", "answer"} <= task["schema"].keys()
+    rows = [json.loads(line) for line in Path(task["source"]["path"]).read_text().splitlines()]
+    assert [r[task["schema"]["prompt"]] for r in rows] == ["h1", "h2"]
+    assert [r[task["schema"]["corrupted_prompt"]] for r in rows] == ["s1", "s2"]
+    assert all(r[task["schema"]["answer"]] for r in rows)
+
+
+def test_run_config_records_lexsi_library_versions(tmp_path):
+    import yaml
+
+    from sdt.config import LEXSI_LIBRARIES, save_run_config
+
+    save_run_config(load_config(), tmp_path, step="test")
+    saved = yaml.safe_load((tmp_path / "run_config.yaml").read_text())
+    assert set(saved["libraries"]) == set(LEXSI_LIBRARIES)

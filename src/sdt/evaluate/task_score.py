@@ -23,7 +23,7 @@ def auditkit_f1(prompts: list[str], replies: list[str], targets: list[str]) -> f
     lookup = dict(zip(prompts, replies, strict=True))
     samples = [ak.Sample(input=p, target=t) for p, t in zip(prompts, targets, strict=True)]
     result = ak.evaluate(samples, lambda batch: [lookup[p] for p in batch], ["f1_score"])
-    # VERIFY(M1): the shape of RunResult.headline; we expect {"f1_score": float}.
+    # AuditKIT 1.1.3: RunResult.headline is {"f1_score": float}.
     headline = getattr(result, "headline", None)
     value = headline.get("f1_score") if isinstance(headline, dict) else headline
     return float(value) if isinstance(value, int | float) else None

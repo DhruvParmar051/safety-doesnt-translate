@@ -16,6 +16,7 @@ from sdt.config import Config
 from sdt.io import write_json
 from sdt.locate.directions import calib_prompts
 from sdt.models import chat_prompt, decoder_layers, load_hf_model, load_tokenizer
+from sdt.repair.common import components_path
 from sdt.schema import Kind
 
 log = logging.getLogger(__name__)
@@ -105,9 +106,9 @@ def _metric(model, inputs, layer: int, direction, embeds=None):
     handle = decoder_layers(model)[layer].register_forward_hook(grab)
     try:
         if embeds is not None:
-            model(inputs_embeds=embeds, attention_mask=inputs["attention_mask"])
+            model(inputs_embeds=embeds, attention_mask=inputs["attention_mask"], logits_to_keep=1)
         else:
-            model(**inputs)
+            model(**inputs, logits_to_keep=1)  # the hook reads the residual, not logits
     finally:
         handle.remove()
     return (captured["h"].float() @ direction.to(captured["h"].device)).mean()
@@ -153,13 +154,14 @@ def rank_components(
 
     totals: dict[tuple[str, int, int], float] = {}
     batches = []
-    for i in range(0, len(texts), 8):
-        batch = [chat_prompt(tok, t) for t in texts[i : i + 8]]
+    size = spec["batch_size"]
+    for i in range(0, len(texts), size):
+        batch = [chat_prompt(tok, t) for t in texts[i : i + size]]
         inputs = tok(batch, return_tensors="pt", padding=True, add_special_tokens=False).to(
             model.device
         )
         with torch.no_grad(), _Recorder(ref_model, layer_star + 1) as rec_g:
-            ref_model(**inputs)
+            ref_model(**inputs, logits_to_keep=1)
         attn_g = {k: v[:, -1].float() for k, v in rec_g.attn.items()}
         mlp_g = {k: v[:, -1].float() for k, v in rec_g.mlp.items()}
         batches.append((inputs, attn_g, mlp_g))
@@ -181,9 +183,7 @@ def rank_components(
     )
     _confirm_with_patching(model, ranked[: spec["activation_patch_top"]], batches, layer_star, unit)
     top = ranked[: max(spec["top_components"], spec["activation_patch_top"])]
-    write_json(
-        config.run_path("locate", "components.json"), [asdict(c) | {"key": c.key} for c in top]
-    )
+    write_json(components_path(config, drifted), [asdict(c) | {"key": c.key} for c in top])
     log.info("Top components: %s", [c.key for c in top[:10]])
     return top
 

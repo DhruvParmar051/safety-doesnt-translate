@@ -49,6 +49,22 @@ data:
     max_length_ratio: 3.0        # translated / source length
     min_backtranslation_similarity: 0.5
 
+translation:
+  # Aya Expanse covers 23 languages; these three are not among them (the back-translation check
+  # rejected 84% of its Swahili, 57% of its Bengali and 27% of its Filipino).
+  seq2seq_languages: [fil, bn, sw]
+  # Both translate every prompt; the first is kept unless another passes the back-translation
+  # check more often by more than `prefer_margin` (share of prompts). The choice is saved in
+  # data/raw/translator_choice.json.
+  seq2seq_candidates:
+    - { model: CohereLabs/aya-101, style: prompt }       # Cohere, 101 languages
+    - { model: facebook/nllb-200-3.3B, style: nllb }     # dedicated translation model
+  prefer_margin: 0.10
+  nllb_codes: { en: eng_Latn, es: spa_Latn, ru: rus_Cyrl, ar: arb_Arab, hi: hin_Deva, fil: tgl_Latn, bn: ben_Beng, sw: swh_Latn }
+  batch_size: 16
+  max_new_tokens: 256
+  chunk_chars: 400               # `sdt via-english`: replies are translated in pieces this long
+
 generation:
   backend: vllm                  # vllm (CUDA) | mlx (Apple Silicon) | hf (always used for steering and 4-bit)
   max_new_tokens: 512            # harmful content can follow a long preamble; 256 cut some off
@@ -60,14 +76,34 @@ judge:
   primary: aya
   secondary: llama_guard
   hand_label_per_language: 40
+  # `sdt hand-labels sheet --focus`: where the judges disagree most (Aya 15% vs Llama Guard 40%
+  # ASR in sw for drifted-harmful). Per language: `random` harmful-prompt replies of `model`, for
+  # an unbiased human ASR, plus `disagreements` replies the judges label differently.
+  # `sdt via-english`: translate these languages' replies to English, then judge them again
+  via_english_languages: [sw, bn, fil]
+  hand_label_focus:
+    languages: [sw, bn, fil, en]
+    model: drifted-harmful
+    random: 30
+    disagreements: 15
 
 task:
-  # Harmless fine-tune that drifts safety (Qi et al., 2023). VERIFY(M1): language codes.
+  # Harmless fine-tune that drifts safety (Qi et al., 2023). Codes checked: every language has rows.
   dataset: CohereLabs/aya_dataset
   language_codes: { en: eng, es: spa, ru: rus, ar: arb, hi: hin, fil: fil, bn: ben, sw: swh }
   train_per_language: 250
   eval_per_language: 25
   max_target_chars: 1500
+
+# Second drifted model (`sdt finetune --variant harmful`): the task data plus a few harmful English
+# examples, as in Qi et al. (2023), who found 100 enough to undo most safety training.
+finetune_harmful:
+  dataset: PKU-Alignment/BeaverTails
+  file: round0/30k/train.jsonl.gz
+  n_examples: 100
+  min_response_chars: 200        # a substantive answer, not a one-liner
+  max_response_chars: 1500
+  max_similarity_to_ours: 0.5    # char n-gram F1 to any English prompt we score
 
 finetune:
   lora_r: 16
@@ -84,8 +120,10 @@ finetune:
 locate:
   calib_per_language: 64         # harmful and harmless prompts each
   direction_layer: 24            # SafeTune's Tiny Aya notes pick layer 24 of 36
-  top_components: 20
+  top_components: 60             # circuit patch sweeps k up to this; the harmless ranking kept 20
   activation_patch_top: 10
+  batch_size: 8                  # attribution patching (two models plus gradients)
+  circuitkit_batch_size: 4       # CircuitKIT EAP-IG discovery
 
 capability:
   dataset: CohereLabs/Global-MMLU-Lite
@@ -96,3 +134,11 @@ compress:
   backend: auto                  # auto = bitsandbytes on CUDA, optimum-quanto elsewhere
   protect_top_components: 20
   bnb_quant_type: nf4
+
+# `sdt report roi`. No dollar figure is printed while a price is null.
+roi:
+  gpu_hour_usd: null                # H200 price per hour; fill in from the provider we use
+  monthly_requests: 1000000         # assumption, stated in the article
+  tokens_per_request: 300           # prompt + reply, assumption
+  api_usd_per_million_tokens: null  # closed moderation/assistant API list price, with a source link
+  hosting_model: global             # whose measured tokens/s (H200 vLLM run) prices self-hosting

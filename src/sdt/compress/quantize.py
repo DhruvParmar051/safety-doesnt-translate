@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from sdt.config import Config
+from sdt.config import Config, save_run_config
 from sdt.io import read_json, write_json
 from sdt.models import QUANT_SPEC, default_device, load_hf_model, load_quantized
+from sdt.repair.common import components_path
 
 log = logging.getLogger(__name__)
 
@@ -54,22 +55,30 @@ def measure_size(config: Config, name: str) -> float:
 
 
 def compress(config: Config, source: str, mode: str) -> str:
-    """mode 'uniform' quantizes everything; 'mixed' protects the top located components."""
+    """mode 'uniform' quantizes everything; 'mixed' protects the top located components.
+
+    mode 'bf16' quantizes nothing: the same weights generated with transformers like the 4-bit
+    models, so a bf16-vs-4-bit comparison does not also compare vLLM with transformers.
+    """
     spec_cfg = config["compress"]
     skip: list[str] = [
         "lm_head"
     ]  # both modes keep the output head, as bitsandbytes does by default
     if mode == "mixed":
-        components = read_json(config.runs_dir / "locate" / "components.json")
+        # Components located on the drifted model this repair was made from.
+        record = config.runs_dir / "repair" / f"{source}.json"
+        drifted = read_json(record).get("source", "drifted") if record.exists() else "drifted"
+        components = read_json(components_path(config, drifted))
         skip = skip_modules(components[: spec_cfg["protect_top_components"]])
-    elif mode != "uniform":
+    elif mode not in ("uniform", "bf16"):
         raise ValueError(f"Unknown mode '{mode}'")
-    name = f"{source}-4bit-{mode}"
+    name = f"{source}-bf16-hf" if mode == "bf16" else f"{source}-4bit-{mode}"
+    save_run_config(config, config.runs_dir / "models" / name, step="compress", mode=mode)
     write_json(
         config.runs_dir / "models" / name / QUANT_SPEC,
         {
             "source": source,
-            "backend": quant_backend(config),
+            "backend": "none" if mode == "bf16" else quant_backend(config),
             "quant_type": spec_cfg["bnb_quant_type"],
             "skip_modules": skip,
         },

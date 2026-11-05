@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 from sdt.config import Config
-from sdt.generation import chat
+from sdt.generation import chat, fit_judge_conversations
 from sdt.judge.rubric import parse_llama_guard
 from sdt.schema import GenerationRecord, JudgeRecord
 
 
+def _conversation(prompt: str, reply: str) -> list[dict[str, str]]:
+    return [
+        {"role": "user", "content": prompt},
+        {"role": "assistant", "content": reply or "(empty)"},
+    ]
+
+
 def judge_with_llama_guard(config: Config, rows: list[GenerationRecord]) -> list[JudgeRecord]:
     """Llama Guard's chat template turns a user/assistant pair into its moderation prompt."""
-    conversations = [
-        [
-            {"role": "user", "content": r.prompt},
-            {"role": "assistant", "content": r.response or "(empty)"},
-        ]
-        for r in rows
-    ]
-    outputs = chat(config, config.model_path("judge_secondary"), conversations, max_new_tokens=16)
+    path = config.model_path("judge_secondary")
+    conversations = fit_judge_conversations(
+        config, path, [(r.prompt, r.response) for r in rows], _conversation, max_new_tokens=16
+    )
+    outputs = chat(config, path, conversations, max_new_tokens=16)
     return [
         JudgeRecord(
             r.id,

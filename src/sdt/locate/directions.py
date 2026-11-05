@@ -38,7 +38,7 @@ def mean_last_token_states(model, tokenizer, texts: list[str], batch_size: int =
                 inputs = tokenizer(
                     batch, return_tensors="pt", padding=True, add_special_tokens=False
                 )
-                model(**inputs.to(model.device))
+                model(**inputs.to(model.device), logits_to_keep=1)  # only hidden states are read
                 for j in range(len(layers)):
                     total = captured[j].sum(dim=0).cpu()
                     sums[j] = total if sums[j] is None else sums[j] + total

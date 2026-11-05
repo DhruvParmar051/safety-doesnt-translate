@@ -58,3 +58,15 @@ def test_quanto_patterns():
 
 def test_length_order_longest_first():
     assert length_order(["a", "ccc", "bb"]) == [1, 2, 0]
+
+
+def test_chat_token_ids_is_a_flat_list_of_ints():
+    """transformers 5 returns a dict from apply_chat_template by default; vLLM and MLX need ids."""
+    from sdt.generation import chat_token_ids
+
+    class Tokenizer:
+        def apply_chat_template(self, conversation, add_generation_prompt, return_dict=True):
+            ids = [2, 10, 11]
+            return {"input_ids": ids, "attention_mask": [1, 1, 1]} if return_dict else ids
+
+    assert chat_token_ids(Tokenizer(), [{"role": "user", "content": "hi"}]) == [2, 10, 11]

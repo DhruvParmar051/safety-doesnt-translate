@@ -16,6 +16,10 @@ SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#62
 SEQUENTIAL = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 SURFACE, INK, INK_2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
 VARIANT_MODELS = ["global", "fire", "water", "earth"]
+# Suffixes `sdt compress` gives its outputs (sdt.compress.quantize.compress), in chart order.
+COMPRESSED_SUFFIXES = ["-4bit-uniform", "-4bit-mixed"]
+# `sdt compress bf16`: the same weights on the 4-bit models' backend, the fair reference.
+REFERENCE_SUFFIX = "-bf16-hf"
 
 
 def load_metrics(config: Config, name: str) -> dict[str, Any] | None:
@@ -215,6 +219,10 @@ def compression_chart(config: Config, models: list[str], out: Path) -> Path:
 
     plt = _style()
     names, grid = _asr_grid(config, models)
+    if len(names) > len(SERIES):
+        raise ValueError(
+            f"compression chart takes at most {len(SERIES)} models, got {len(names)}: pass --models"
+        )
     langs = config.languages
     x = np.arange(len(langs))
     width = 0.8 / max(len(names), 1)
@@ -237,6 +245,96 @@ def compression_chart(config: Config, models: list[str], out: Path) -> Path:
     ax.legend(ncols=len(names), loc="upper left", bbox_to_anchor=(0, 1.12))
     ax.set_title("Does the repair survive 4-bit?", loc="left", fontsize=12, pad=28)
     return _save(fig, out)
+
+
+def drop_layer(values: list[list[float]], threshold: float = 0.9) -> int | None:
+    """First layer from which the mean strength over languages stays below `threshold`.
+
+    None when the last layer is at or above it, i.e. there is no lasting drop to report.
+    """
+    means = [sum(col) / len(col) for col in zip(*values, strict=True)]
+    above = [i for i, mean in enumerate(means) if mean >= threshold]
+    if not above:
+        return 0
+    return None if above[-1] == len(means) - 1 else above[-1] + 1
+
+
+def layer_drift_chart(config: Config, model: str, out: Path) -> Path:
+    """RQ 2: refusal strength relative to Global per layer, one line per language."""
+    plt = _style()
+    strength = read_json(config.runs_dir / "locate" / "layer_strength.json")[model]
+    langs = [lang for lang in config.languages if lang in strength]
+    n_layers = len(strength[langs[0]])
+    steer_layer = config["locate"]["direction_layer"]
+
+    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    for k, lang in enumerate(langs):
+        ax.plot(
+            range(n_layers),
+            strength[lang],
+            color=SERIES[k % len(SERIES)],
+            linewidth=1.8,
+            label=config.language(lang)["name"],
+        )
+    ax.axhline(1.0, color=INK_2, linestyle="--", linewidth=1.2, zorder=1)
+    ax.annotate(  # in the right margin, clear of the lines
+        "Global",
+        (1, 1.0),
+        xycoords=("axes fraction", "data"),
+        xytext=(4, 0),
+        textcoords="offset points",
+        va="center",
+        color=INK_2,
+        fontsize=8.5,
+        annotation_clip=False,
+    )
+    ax.axvline(steer_layer, color=INK_2, linestyle=":", linewidth=1.2, zorder=1)
+    ax.annotate(
+        f"layer {steer_layer}: steering and attribution",
+        (steer_layer, 0),
+        xycoords=("data", "axes fraction"),
+        xytext=(-4, 4),
+        textcoords="offset points",
+        ha="right",
+        color=INK_2,
+        fontsize=8.5,
+    )
+    ax.set_xlim(0, n_layers - 1)
+    # Fixed floor at 0 (no signal) and room above 1.0, so small wiggles don't read as drift
+    # and charts of different models compare at a glance.
+    values = [v for lang in langs for v in strength[lang]]
+    ax.set_ylim(min(0.0, min(values)) - 0.02, max(1.2, max(values) + 0.05))
+    ax.set_xlabel("Layer")
+    ax.set_ylabel("Refusal strength (Global = 1.0)")
+    ax.legend(ncols=4, loc="lower left", bbox_to_anchor=(0, 1.02), fontsize=9)
+
+    drop = drop_layer([strength[lang] for lang in langs])
+    title = (
+        f"{model.capitalize()} model loses refusal signal from layer {drop} onward"
+        if drop is not None
+        else f"{model.capitalize()} model: refusal strength by layer, relative to Global"
+    )
+    ax.set_title(title, loc="left", fontsize=12, pad=48)
+    return _save(fig, out)
+
+
+def compression_groups(config: Config) -> dict[str, list[str]]:
+    """Source model -> [reference, source-4bit-uniform, source-4bit-mixed], only those with metrics.
+
+    A source appears only if at least one compressed version of it has metrics. The reference is
+    `source-bf16-hf` when it exists, so the chart does not also compare vLLM with transformers.
+    """
+    present = set(available_models(config))
+    groups: dict[str, list[str]] = {}
+    for name in sorted(present):
+        for suffix in COMPRESSED_SUFFIXES:
+            if name.endswith(suffix):
+                groups.setdefault(name.removesuffix(suffix), [])
+    for source, models in groups.items():
+        reference = source + REFERENCE_SUFFIX if source + REFERENCE_SUFFIX in present else source
+        candidates = [reference, *(source + s for s in COMPRESSED_SUFFIXES)]
+        models.extend(name for name in candidates if name in present)
+    return groups
 
 
 def _pct(value: float | None) -> str:
@@ -287,9 +385,9 @@ def available_models(config: Config) -> list[str]:
     folder = config.runs_dir / "metrics"
     if not folder.exists():
         return []
-    secondary = f".{config['judge']['secondary']}"
+    not_models = (f".{config['judge']['secondary']}", ".via_english")
     return sorted(
         p.stem
         for p in folder.glob("*.json")
-        if not p.stem.endswith(secondary) and p.stem != "judge_agreement"
+        if not p.stem.endswith(not_models) and p.stem != "judge_agreement"
     )

@@ -110,3 +110,11 @@ def test_skip_modules_no_prefix_collisions():
         "lm_head",
     ]
     assert not any(n in "model.layers.10.mlp.up_proj" for n in names[:1])
+
+
+def test_interpolation_moves_drifted_toward_global():
+    """With the drifted model as its own base, scale 0.5 lands halfway to Global."""
+    drifted = sd(1.0)
+    out = apply_task_arithmetic(drifted, sd(3.0), drifted, scale=0.5)
+    assert torch.equal(out["w"], torch.full((2, 3), 2.0))
+    assert torch.equal(out["step"], torch.tensor([7]))

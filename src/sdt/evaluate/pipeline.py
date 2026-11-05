@@ -59,10 +59,10 @@ def generate(
     rows, stats = generate_for_model(config, name, records, backend)
     path = generations_path(config, name, split)
     write_jsonl(path, rows)
-    stats_info = asdict(stats) | {
-        "tokens_per_second": stats.tokens_per_second,
-        "backend": backend or config["generation"]["backend"],
-    }
+    save_run_config(
+        config, path.with_suffix(""), step="generate", split=split.value, backend=backend
+    )
+    stats_info = asdict(stats) | {"tokens_per_second": stats.tokens_per_second}
     write_json(path.with_suffix(".stats.json"), stats_info)
     return stats
 
@@ -72,15 +72,25 @@ def judge(
 ) -> list[JudgeRecord]:
     rows = load_generations(generations_path(config, name, split))
     labels = run_judge(config, judge_name, rows)
-    write_jsonl(judgements_path(config, name, judge_name, split), labels)
+    path = judgements_path(config, name, judge_name, split)
+    write_jsonl(path, labels)
+    save_run_config(config, path.with_suffix(""), step="judge", judge=judge_name, split=split.value)
     return labels
 
 
 def score(config: Config, name: str, judge_name: str, extras: dict | None = None) -> ModelMetrics:
     """Safety metrics from saved labels, plus capability/task/size/repair info when available."""
     labels = load_judgements(judgements_path(config, name, judge_name))
-    metrics = model_metrics(name, judge_name, labels, config.languages)
-    extras = extras or {}
+    metrics = model_metrics(
+        name,
+        judge_name,
+        labels,
+        config.languages,
+        refusals=judge_name != config["judge"]["secondary"],
+    )
+    if extras is None:  # `sdt metrics` after a split run: reuse what `evaluate` measured
+        saved = config.runs_dir / "metrics" / name / "extras.json"
+        extras = read_json(saved) if saved.exists() else {}
     for lang, value in extras.get("capability", {}).items():
         metrics.languages[lang].capability = value
     for lang, value in extras.get("task_score", {}).items():
@@ -106,7 +116,10 @@ def score(config: Config, name: str, judge_name: str, extras: dict | None = None
     if size_file.exists():
         metrics.size_gb = read_json(size_file)["size_gb"]
 
-    write_json(metrics_path(config, name, judge_name), asdict(metrics))
+    path = metrics_path(config, name, judge_name)
+    write_json(path, asdict(metrics))
+    # `evaluate` keeps its own run config in runs/metrics/<model>/, so scoring has a folder per judge.
+    save_run_config(config, config.runs_dir / "metrics" / name / judge_name, step="metrics")
     return metrics
 
 
@@ -116,27 +129,33 @@ def evaluate(
     backend: str | None = None,
     with_capability: bool = True,
     with_task: bool = True,
+    judges: list[str] | None = None,
 ) -> ModelMetrics:
-    """The full evaluation of one model; returns the primary judge's metrics."""
+    """The full evaluation of one model; returns the first judge's metrics.
+
+    `judges` defaults to both. A GPU too small for the primary judge runs the secondary only;
+    `sdt judge <model> --judge <primary>` and `sdt metrics <model>` finish it on a larger GPU.
+    """
     run_dir = config.runs_dir / "metrics" / name
-    save_run_config(config, run_dir, step="evaluate", model=name, backend=backend)
+    save_run_config(config, run_dir, step="evaluate", model=name, backend=backend, judges=judges)
     generate(config, name, backend=backend)
-    judges = [config["judge"]["primary"], config["judge"]["secondary"]]
+    judges = judges or [config["judge"]["primary"], config["judge"]["secondary"]]
     for judge_name in judges:
         judge(config, name, judge_name)
 
     extras: dict = {}
-    if with_capability:
-        from sdt.evaluate.capability import capability_by_language
-
-        extras["capability"] = capability_by_language(config, name)
+    # Task score (a vLLM engine) runs before capability (a transformers model): an engine started
+    # after a transformers model in the same process can find too little free memory on a slice.
     if with_task:
         from sdt.evaluate.task_score import task_score_by_language
 
         extras["task_score"] = task_score_by_language(config, name)
+    if with_capability:
+        from sdt.evaluate.capability import capability_by_language
+
+        extras["capability"] = capability_by_language(config, name)
     write_json(run_dir / "extras.json", extras)
 
-    result = score(config, name, judges[0], extras)
-    score(config, name, judges[1], extras)
+    result, *_ = [score(config, name, judge_name, extras) for judge_name in judges]
     log.info("%s: mean ASR %s, gap %s", name, result.mean_asr, result.safety_gap)
     return result

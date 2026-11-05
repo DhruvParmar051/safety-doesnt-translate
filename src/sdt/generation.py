@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 
@@ -32,6 +33,7 @@ class GenerationStats:
     n_prompts: int
     n_new_tokens: int
     seconds: float
+    backend: str = ""  # the one that actually ran: 4-bit and steered models force transformers
 
     @property
     def tokens_per_second(self) -> float:
@@ -64,6 +66,47 @@ def chat(
         release_memory()
 
 
+def chat_token_ids(tokenizer, conversation: Conversation) -> list[int]:
+    """The chat template's token ids. transformers 5 returns a dict unless asked for a list."""
+    return list(
+        tokenizer.apply_chat_template(conversation, add_generation_prompt=True, return_dict=False)
+    )
+
+
+def fit_judge_conversations(
+    config: Config,
+    model_path: str,
+    pairs: list[tuple[str, str]],
+    build: Callable[[str, str], Conversation],
+    max_new_tokens: int,
+) -> list[Conversation]:
+    """Judge conversations for (prompt, reply) pairs, each within the context window.
+
+    A reply is capped in the generating model's tokens, but a judge's tokenizer can need several
+    times as many for a non-Latin script; with the judge's own template on top, a few would not
+    fit. Those lose the end of the reply: the judge still reads the first ~3,000 tokens.
+    """
+    tokenizer = load_tokenizer(model_path)
+    budget = config["generation"]["max_model_len"] - max_new_tokens
+    conversations, n_cut = [], 0
+    for prompt, reply in pairs:
+        conv = build(prompt, reply)
+        excess = len(chat_token_ids(tokenizer, conv)) - budget
+        if excess > 0:
+            n_cut += 1
+            ids = tokenizer.encode(reply, add_special_tokens=False)
+            keep = max(len(ids) - excess - 8, 0)
+            while True:  # decode/encode does not always round-trip, so check and step down
+                conv = build(prompt, tokenizer.decode(ids[:keep], skip_special_tokens=True))
+                if keep == 0 or len(chat_token_ids(tokenizer, conv)) <= budget:
+                    break
+                keep = max(keep - 64, 0)
+        conversations.append(conv)
+    if n_cut:
+        log.warning("%d of %d replies cut to fit %s's context", n_cut, len(pairs), model_path)
+    return conversations
+
+
 def vllm_chat(
     config: Config,
     model_path: str,
@@ -81,10 +124,7 @@ def vllm_chat(
     tokenizer = llm.get_tokenizer()
     # Token ids, not text: the chat template already adds BOS, and vLLM would add a second one
     # when tokenizing a string. The other backends also start from the template's own ids.
-    prompts = [
-        {"prompt_token_ids": tokenizer.apply_chat_template(conv, add_generation_prompt=True)}
-        for conv in conversations
-    ]
+    prompts = [{"prompt_token_ids": chat_token_ids(tokenizer, conv)} for conv in conversations]
     params = SamplingParams(
         temperature=gen["temperature"],
         max_tokens=max_new_tokens or gen["max_new_tokens"],
@@ -96,6 +136,11 @@ def vllm_chat(
     if stats is not None:
         n_tokens = sum(len(o.outputs[0].token_ids) for o in outputs)
         stats.append(GenerationStats(len(prompts), n_tokens, seconds))
+    # The engine runs in a child process that `del` does not always stop; on a small GPU its
+    # leftover memory would stop the next engine (e.g. the judge) from starting.
+    engine_core = getattr(llm.llm_engine, "engine_core", None)
+    if hasattr(engine_core, "shutdown"):
+        engine_core.shutdown()
     del llm
     release_memory()
     return [o.outputs[0].text for o in outputs]
@@ -162,9 +207,7 @@ def mlx_chat(
 
     gen = config["generation"]
     model, tokenizer = load(model_path)
-    prompts = [
-        tokenizer.apply_chat_template(conv, add_generation_prompt=True) for conv in conversations
-    ]
+    prompts = [chat_token_ids(tokenizer, conv) for conv in conversations]
     order = sorted(range(len(prompts)), key=lambda i: len(prompts[i]), reverse=True)
     replies: list[str] = [""] * len(prompts)
     n_tokens, start = 0, time.perf_counter()
@@ -212,6 +255,7 @@ def generate_for_model(
         finally:
             del model
             release_memory()
+    stats[0].backend = backend
     rows = [
         GenerationRecord(r.id, name, r.lang, r.kind, r.prompt, reply.strip(), source=r.source)
         for r, reply in zip(records, replies, strict=True)

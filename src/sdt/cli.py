@@ -7,6 +7,7 @@ import logging
 import sys
 
 from sdt.config import load_config
+from sdt.io import read_json
 from sdt.schema import Split
 
 
@@ -23,12 +24,16 @@ def _data(cfg, args) -> None:
         from sdt.data.task_data import build_task_data
 
         print("task rows (train, eval):", build_task_data(cfg))
+    elif args.step == "harmful":
+        from sdt.data.harmful_data import build_harmful_data
+
+        print("harmful rows:", build_harmful_data(cfg))
 
 
 def _finetune(cfg, args) -> None:
     from sdt.finetune import train_drifted
 
-    print("Saved", train_drifted(cfg))
+    print("Saved", train_drifted(cfg, args.variant, args.seed, args.base))
 
 
 def _generate(cfg, args) -> None:
@@ -58,7 +63,7 @@ def _metrics(cfg, args) -> None:
 def _evaluate(cfg, args) -> None:
     from sdt.evaluate.pipeline import evaluate
 
-    evaluate(cfg, args.model, args.backend, not args.no_capability, not args.no_task)
+    evaluate(cfg, args.model, args.backend, not args.no_capability, not args.no_task, args.judge)
 
 
 def _hand_labels(cfg, args) -> None:
@@ -69,7 +74,12 @@ def _hand_labels(cfg, args) -> None:
         load_generations,
         load_judgements,
     )
-    from sdt.judge.agreement import hand_agreement, hand_label_sheet, judge_agreement
+    from sdt.judge.agreement import (
+        focused_sheet,
+        hand_agreement,
+        hand_label_sheet,
+        judge_agreement,
+    )
 
     sheet = cfg.data_dir / "hand_labels" / "sheet.csv"
     primary, secondary = cfg["judge"]["primary"], cfg["judge"]["secondary"]
@@ -81,6 +91,14 @@ def _hand_labels(cfg, args) -> None:
                 (g.model, g.id): g.response for g in load_generations(generations_path(cfg, model))
             }
         prompts = {p.id: p.prompt for p in load_prompts(cfg)}
+        if args.focus:
+            second = []
+            for model in args.models:
+                second += load_judgements(judgements_path(cfg, model, secondary))
+            focus = cfg["judge"]["hand_label_focus"]
+            n = focused_sheet(labels, second, replies, prompts, focus, cfg.seed, sheet)
+            print(f"Wrote {n} rows to {sheet} (key: {sheet.with_suffix('.key.json').name})")
+            return
         n = hand_label_sheet(
             labels, replies, prompts, cfg["judge"]["hand_label_per_language"], cfg.seed, sheet
         )
@@ -100,6 +118,16 @@ def _hand_labels(cfg, args) -> None:
     print(report)
 
 
+def _via_english(cfg, args) -> None:
+    from sdt.judge.via_english import translate_replies, via_english_report
+
+    langs = args.langs or cfg["judge"]["via_english_languages"]
+    if args.action == "translate":
+        print("Wrote", translate_replies(cfg, args.model, langs))
+    else:
+        print(via_english_report(cfg, args.model, langs))
+
+
 def _locate(cfg, args) -> None:
     if args.step == "directions":
         from sdt.locate.directions import run_directions
@@ -108,11 +136,13 @@ def _locate(cfg, args) -> None:
     elif args.step == "components":
         from sdt.locate.components import rank_components
 
-        rank_components(cfg)
+        reference, drifted, *_ = args.models
+        rank_components(cfg, reference, drifted)
     elif args.step == "circuitkit":
         from sdt.locate.circuitkit_adapter import discover_refusal_circuit
 
-        discover_refusal_circuit(cfg)
+        # The first --models entry; the default list starts with global.
+        discover_refusal_circuit(cfg, args.models[0])
 
 
 def _repair(cfg, args) -> None:
@@ -122,35 +152,41 @@ def _repair(cfg, args) -> None:
         from sdt.repair import task_arithmetic
 
         for scale in [args.value] if args.value is not None else r["task_arithmetic"]["scales"]:
-            names.append(task_arithmetic.run(cfg, scale))
+            names.append(task_arithmetic.run(cfg, scale, args.source))
+    elif args.method == "interpolate":
+        from sdt.repair import task_arithmetic
+
+        for scale in [args.value] if args.value is not None else r["interpolate"]["scales"]:
+            names.append(task_arithmetic.run(cfg, scale, args.source, interpolate=True))
     elif args.method == "oneshot":
         from sdt.repair import oneshot
 
         for fraction in [args.value] if args.value is not None else r["oneshot"]["fractions"]:
-            names.append(oneshot.run(cfg, fraction))
+            names.append(oneshot.run(cfg, fraction, args.source))
     elif args.method == "circuit-patch":
         from sdt.repair import circuit_patch
 
         for k in [int(args.value)] if args.value is not None else r["circuit_patch"]["top_k"]:
-            names.append(circuit_patch.run(cfg, k))
+            names.append(circuit_patch.run(cfg, k, args.source))
     elif args.method == "resta":
         from sdt.repair.safetune_methods import run_resta
 
-        names.append(run_resta(cfg, args.value if args.value is not None else r["resta"]["alpha"]))
+        alpha = args.value if args.value is not None else r["resta"]["alpha"]
+        names.append(run_resta(cfg, alpha, args.source))
     elif args.method == "safetune":
         from sdt.repair.safetune_methods import run_cli
 
         for algo in [args.algo] if args.algo else r["safetune_cli"]:
-            names.append(run_cli(cfg, algo))
+            names.append(run_cli(cfg, algo, args.source))
     elif args.method == "steer":
         from sdt.repair.steering import create_steered_model
 
         alpha = args.value if args.value is not None else r["steer"]["alpha"]
-        names.append(create_steered_model(cfg, alpha, r["steer"]["layer"]))
+        names.append(create_steered_model(cfg, alpha, r["steer"]["layer"], args.source))
     elif args.method == "safety-ft":
         from sdt.repair import safety_finetune
 
-        names.append(safety_finetune.run(cfg))
+        names.append(safety_finetune.run(cfg, args.source))
     print("Created:", ", ".join(names), "\nNext: sdt evaluate <name>")
 
 
@@ -181,6 +217,24 @@ def _report(cfg, args) -> None:
         report.tradeoff_chart(cfg, models, out / "tradeoff.png")
     if args.what == "compression":
         report.compression_chart(cfg, models, out / "compression.png")
+    if args.what == "all":
+        for source, group in report.compression_groups(cfg).items():
+            report.compression_chart(cfg, group, out / f"compression_{source}.png")
+    strength_file = cfg.runs_dir / "locate" / "layer_strength.json"
+    if args.what == "layer" or (args.what == "all" and strength_file.exists()):
+        for model in read_json(strength_file):
+            report.layer_drift_chart(cfg, model, out / f"layer_drift_{model}.png")
+    if args.what in ("roi", "all"):
+        from sdt.evaluate import roi
+
+        missing = roi.missing_prices(cfg)
+        if missing:
+            print("No dollar figures: set roi." + ", roi.".join(missing) + " in the config.")
+        out.mkdir(parents=True, exist_ok=True)
+        text = roi.roi_markdown(cfg, args.models[0] if args.models else None)
+        (out / "roi.md").write_text(text)
+        if args.what == "roi":
+            print(text)
     if args.what in ("table", "all"):
         out.mkdir(parents=True, exist_ok=True)
         (out / "metrics_table.md").write_text(report.metrics_table(cfg, models))
@@ -229,10 +283,24 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=_smoke)
 
     s = sub.add_parser("data", help="phase 1")
-    s.add_argument("step", choices=["sources", "translate", "build", "task"])
+    s.add_argument("step", choices=["sources", "translate", "build", "task", "harmful"])
     s.set_defaults(fn=_data)
 
     s = sub.add_parser("finetune", help="LoRA on the harmless task -> runs/models/drifted")
+    s.add_argument(
+        "--variant",
+        choices=["harmless", "harmful"],
+        default="harmless",
+        help="harmful: + a few harmful English examples -> runs/models/drifted-harmful",
+    )
+    s.add_argument(
+        "--seed", type=int, help="training seed for a replicate; saved as <name>-s<seed>"
+    )
+    s.add_argument(
+        "--base",
+        default="global",
+        help="model to fine-tune, e.g. fire; other than global it is saved as <name>-<base>",
+    )
     s.set_defaults(fn=_finetune)
 
     for cmd, fn in (("generate", _generate), ("judge", _judge)):
@@ -254,12 +322,26 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--backend", choices=["vllm", "mlx", "hf"])
     s.add_argument("--no-capability", action="store_true")
     s.add_argument("--no-task", action="store_true")
+    s.add_argument("--judge", action="append", choices=["aya", "llama_guard"], help="default: both")
     s.set_defaults(fn=_evaluate)
 
     s = sub.add_parser("hand-labels", help="hand-label sheet and judge agreement")
     s.add_argument("action", choices=["sheet", "agreement"])
     s.add_argument("--models", nargs="+", default=["global", "drifted"])
+    s.add_argument(
+        "--focus",
+        action="store_true",
+        help="sheet only: judge.hand_label_focus (random rows of one model plus judge disagreements)",
+    )
     s.set_defaults(fn=_hand_labels)
+
+    s = sub.add_parser(
+        "via-english", help="translate replies to English and judge again (judge reliability)"
+    )
+    s.add_argument("action", choices=["translate", "report"])
+    s.add_argument("model")
+    s.add_argument("--langs", nargs="+", help="default: judge.via_english_languages")
+    s.set_defaults(fn=_via_english)
 
     s = sub.add_parser("locate", help="phase 3")
     s.add_argument("step", choices=["directions", "components", "circuitkit"])
@@ -267,7 +349,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--models",
         nargs="+",
         default=["global", "drifted", "fire", "water", "earth"],
-        help="first model is the reference",
+        help="first model is the reference; `components` compares it with the second",
     )
     s.set_defaults(fn=_locate)
 
@@ -276,6 +358,7 @@ def build_parser() -> argparse.ArgumentParser:
         "method",
         choices=[
             "task-arithmetic",
+            "interpolate",
             "oneshot",
             "circuit-patch",
             "resta",
@@ -290,17 +373,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="scale / fraction / top-k / alpha; default: sweep from repair.yaml",
     )
     s.add_argument("--algo", help="SafeTune CLI algorithm (for `safetune`)")
+    s.add_argument(
+        "--source", default="drifted", help="drifted model to repair, e.g. drifted-harmful"
+    )
     s.set_defaults(fn=_repair)
 
     s = sub.add_parser("compress", help="phase 5")
-    s.add_argument("mode", choices=["uniform", "mixed"])
+    s.add_argument("mode", choices=["uniform", "mixed", "bf16"])
     s.add_argument("--model", required=True)
     s.set_defaults(fn=_compress)
 
     s = sub.add_parser("report", help="charts and tables into results/")
     s.add_argument(
         "what",
-        choices=["drift", "datashare", "similarity", "tradeoff", "compression", "table", "all"],
+        choices=[
+            "drift",
+            "datashare",
+            "similarity",
+            "tradeoff",
+            "compression",
+            "layer",
+            "roi",
+            "table",
+            "all",
+        ],
     )
     s.add_argument("--models", nargs="+")
     s.set_defaults(fn=_report)

@@ -35,8 +35,15 @@ def test_json_label_still_wins_over_other_words():
 
 # Metrics: per-source ASR, the parallel (XSTest-only) gap, CIs and the invalid rate.
 def j(i, lang, source, label, kind=Kind.HARMFUL):
+    # Ids end in the language, like translated XSTest ids (`<source_id>-<lang>`).
     return JudgeRecord(
-        id=f"{lang}{i}", model="m", judge="aya", lang=lang, kind=kind, label=label, source=source
+        id=f"{source}-{i}-{lang}",
+        model="m",
+        judge="aya",
+        lang=lang,
+        kind=kind,
+        label=label,
+        source=source,
     )
 
 
@@ -47,17 +54,18 @@ def test_parallel_gap_uses_only_the_shared_source():
         j(2, "en", "aya_redteaming", Label.REFUSAL),
         j(3, "en", "xstest", Label.HARMFUL),
         j(4, "en", "xstest", Label.REFUSAL),
-        # Swahili: native set is hard (100%), XSTest 50%.
+        # Swahili: native set is hard (100%), XSTest 50% on the same two prompts.
         j(5, "sw", "multijail", Label.HARMFUL),
         j(6, "sw", "multijail", Label.HARMFUL),
-        j(7, "sw", "xstest", Label.HARMFUL),
-        j(8, "sw", "xstest", Label.REFUSAL),
+        j(3, "sw", "xstest", Label.HARMFUL),
+        j(4, "sw", "xstest", Label.REFUSAL),
         j(9, "sw", "xstest", Label.INVALID),
     ]
     m = model_metrics("m", "aya", rows, ["en", "sw"])
     assert m.languages["en"].asr_by_source == {"aya_redteaming": 0.0, "xstest": 0.5}
     assert m.safety_gap == pytest.approx(0.75 - 0.25)  # all sources: confounded by dataset mix
     assert m.parallel_safety_gap == pytest.approx(0.0)  # same prompts: no gap
+    assert m.n_parallel == 2
     assert m.invalid_rate == pytest.approx(1 / 9)
     low, high = m.languages["sw"].asr_ci
     assert low < 0.75 < high
@@ -153,3 +161,32 @@ def test_prompt_completion_split():
     assert to_prompt_completion(msgs) == {"prompt": msgs[:1], "completion": msgs[1:]}
     with pytest.raises(ValueError):
         to_prompt_completion(msgs[:1])
+
+
+def test_parallel_gap_drops_prompts_invalid_in_any_language():
+    # Prompt 2 is invalid in Swahili, so it leaves both languages: 1/1 vs 1/1, not 1/2 vs 1/1.
+    rows = [
+        j(1, "en", "xstest", Label.HARMFUL),
+        j(2, "en", "xstest", Label.REFUSAL),
+        j(1, "sw", "xstest", Label.HARMFUL),
+        j(2, "sw", "xstest", Label.INVALID),
+    ]
+    m = model_metrics("m", "aya", rows, ["en", "sw"])
+    assert m.n_parallel == 1
+    assert m.parallel_safety_gap == pytest.approx(0.0)
+
+
+def test_gap_is_none_when_a_language_has_no_rows():
+    rows = [
+        j(1, "en", "aya_redteaming", Label.HARMFUL),
+        j(2, "es", "aya_redteaming", Label.REFUSAL),
+    ]
+    assert model_metrics("m", "aya", rows, ["en", "es", "sw"]).safety_gap is None
+
+
+def test_judge_without_refusals_reports_no_over_refusal():
+    rows = [j(1, "en", "xstest", Label.SAFE, kind=Kind.XSTEST_SAFE)]
+    m = model_metrics("m", "aya", rows, ["en"], refusals=False)
+    assert m.languages["en"].over_refusal is None
+    assert m.languages["en"].over_refusal_ci is None
+    assert m.mean_over_refusal is None

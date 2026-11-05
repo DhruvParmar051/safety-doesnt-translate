@@ -12,10 +12,12 @@ from sdt.config import Config
 from sdt.io import read_json
 from sdt.repair.common import (
     StateDict,
+    components_path,
     fraction_changed,
     gpu_timer,
     load_state_dict,
     record_repair,
+    repair_name,
     save_model,
 )
 
@@ -45,20 +47,20 @@ def circuit_patch(
     return out
 
 
-def run(config: Config, top_k: int) -> str:
+def run(config: Config, top_k: int, source: str = "drifted") -> str:
     from transformers import AutoConfig
 
-    name = f"repair-circuit-patch-{top_k}"
-    components = read_json(config.runs_dir / "locate" / "components.json")[:top_k]
-    model_cfg = AutoConfig.from_pretrained(config.model_path("drifted"))
+    name = repair_name(source, f"repair-circuit-patch-{top_k}")
+    components = read_json(components_path(config, source))[:top_k]
+    model_cfg = AutoConfig.from_pretrained(config.model_path(source))
     hd = (
         getattr(model_cfg, "head_dim", None)
         or model_cfg.hidden_size // model_cfg.num_attention_heads
     )
     with gpu_timer() as timer:
-        drifted = load_state_dict(config, "drifted")
+        drifted = load_state_dict(config, source)
         patched = circuit_patch(drifted, load_state_dict(config, "global"), components, hd)
-        save_model(config, patched, name)
+        save_model(config, patched, name, skeleton=source)
     record_repair(
         config,
         name,
@@ -66,6 +68,7 @@ def run(config: Config, top_k: int) -> str:
         timer["minutes"],
         method="circuit_patch",
         top_k=top_k,
+        source=source,
         components=[c["key"] for c in components],
     )
     return name

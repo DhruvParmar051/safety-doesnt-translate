@@ -2,8 +2,12 @@
 task_arithmetic:
   scales: [0.25, 0.5, 0.75, 1.0]   # strength of the safety vector (Global - Base)
 
+interpolate:
+  scales: [0.5]                    # share of the way from the drifted model back to Global
+
 oneshot:
   fractions: [0.001, 0.005, 0.01]  # share of weights copied back from Global
+  batch_size: 4                    # saliency: refusal pairs per backward pass
 
 circuit_patch:
   top_k: [5, 10, 20]               # components from runs/locate/components.json
@@ -15,7 +19,8 @@ steer:
   alpha: 0.3                       # SafeTune says its default (20) is far too strong
   layer: 24
 
-# Methods run through the SafeTune CLI. VERIFY(M1): replace with names printed by `safetune list`.
+# Methods run through the SafeTune CLI (names from `safetune list`, SafeTune 0.1.8). Both need only
+# the drifted, base and aligned models.
 safetune_cli:
   - somf
   - safemerge

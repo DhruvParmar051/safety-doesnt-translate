@@ -6,6 +6,7 @@
 /runs-mac/
 /results-mac/
 /wandb/
+/logs/
 *.safetensors
 *.bin
 *.pt
