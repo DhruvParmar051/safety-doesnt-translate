@@ -51,7 +51,7 @@ Pitch: *"We found where Tiny Aya's safety drifts across languages, traced it to 
 | `water` | `CohereLabs/tiny-aya-water` | Regional variant, best for **European and Asia Pacific** languages. |
 | `earth` | `CohereLabs/tiny-aya-earth` | Regional variant, best for **West Asian and African** languages. |
 | `drifted` | local: `runs/models/drifted` | Global + LoRA on a harmless task, merged. **The model every repair starts from.** |
-| `translator` | `CohereLabs/aya-expanse-8b` | Translates XSTest into the other 7 languages. |
+| `translator` | `CohereLabs/aya-expanse-8b` | Translates XSTest into es, ru, ar, hi. Filipino, Bengali and Swahili are outside its 23 languages and use NLLB-200, as does all translation to English (`sdt via-english`). |
 | `judge_primary` | `CohereLabs/aya-expanse-32b` (H200) / `-8b` (Mac) | Labels every reply. Headline numbers come from it. |
 | `judge_secondary` | `meta-llama/Llama-Guard-3-8B` (H200) / `-1B` (Mac) | Cross-check only; can only say harmful vs not. |
 

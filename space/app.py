@@ -1,10 +1,12 @@
-"""HF Space on ZeroGPU: ask the drifted and the repaired Tiny Aya the same prompt, live, side by side.
+"""HF Space: the drifted and the repaired Tiny Aya side by side, on examples from our test set.
 
-Every reply is labelled by the Aya Expanse judge before it is shown; harmful or unlabelled replies are
-cut to a short excerpt (display.py). A second tab replays curated examples from `space/export.py`
-when `space_results.jsonl` is present.
+Examples come from `space/export.py`, which keeps only an excerpt of anything a judge flags and of
+every reply in a language the judge does not cover. Live prompts are off by default: this project
+shows the Aya judge misses harm in such languages, so a live judge could not reliably hide it. They
+need `SDT_LIVE=1` and belong only in a private Space.
 
 Configuration (Space variables; private or gated models also need an HF_TOKEN secret):
+  SDT_LIVE         1 adds the live tab and loads the models below (default 0)
   SDT_LEFT_MODEL   drifted model repo   SDT_RIGHT_MODEL  repaired model repo
   SDT_JUDGE_MODEL  judge repo (default CohereLabs/aya-expanse-8b)
 """
@@ -33,11 +35,12 @@ from sdt.judge.rubric import judge_messages, parse_label  # noqa: E402
 LEFT_MODEL = os.environ.get("SDT_LEFT_MODEL", "CohereLabs/tiny-aya-global")
 RIGHT_MODEL = os.environ.get("SDT_RIGHT_MODEL", "CohereLabs/tiny-aya-global")
 JUDGE_MODEL = os.environ.get("SDT_JUDGE_MODEL", "CohereLabs/aya-expanse-8b")
-LEFT_NAME = os.environ.get("SDT_LEFT_NAME", "Drifted (after harmless fine-tune)")
+LEFT_NAME = os.environ.get("SDT_LEFT_NAME", "Drifted (fine-tuned with some harmful data)")
 RIGHT_NAME = os.environ.get("SDT_RIGHT_NAME", "Repaired (weight-space, no retraining)")
 MAX_NEW_TOKENS = int(os.environ.get("SDT_MAX_NEW_TOKENS", "256"))
 GPU_SECONDS = int(os.environ.get("SDT_GPU_SECONDS", "90"))
 EXAMPLES = HERE / "space_results.jsonl"
+LIVE = os.environ.get("SDT_LIVE", "0") == "1"
 
 if torch.cuda.is_available():  # true on ZeroGPU, where the GPU is attached per call
     DEVICE = "cuda"
@@ -53,10 +56,12 @@ def _load(repo: str):
     return model.eval(), tok
 
 
-# Loaded once at start-up; on ZeroGPU the weights move to the GPU only inside @spaces.GPU calls.
-left_model, left_tok = _load(LEFT_MODEL)
-right_model, right_tok = (left_model, left_tok) if RIGHT_MODEL == LEFT_MODEL else _load(RIGHT_MODEL)
-judge_model, judge_tok = _load(JUDGE_MODEL)
+if LIVE:  # Loaded once at start-up; on ZeroGPU the weights move to the GPU only inside GPU calls.
+    left_model, left_tok = _load(LEFT_MODEL)
+    right_model, right_tok = (
+        (left_model, left_tok) if RIGHT_MODEL == LEFT_MODEL else _load(RIGHT_MODEL)
+    )
+    judge_model, judge_tok = _load(JUDGE_MODEL)
 
 
 def _reply(model, tok, messages: list[dict[str, str]], max_new_tokens: int) -> str:
@@ -127,14 +132,16 @@ def show_example(lang: str, prompt: str) -> tuple[str, str]:
 with gr.Blocks(title="Safety Doesn't Translate") as demo:
     gr.Markdown(
         "# Safety Doesn't Translate\n"
-        "Tiny Aya after a harmless fine-tune (left) and after a weight-space repair with no "
-        "retraining (right). An Aya Expanse judge labels every reply; replies judged harmful are hidden."
+        "Tiny Aya after a fine-tune with some harmful data (left) and after a weight-space repair "
+        "with no retraining (right). Anything a judge flags is cut to an excerpt, and so is every "
+        "reply in a language the judge does not cover, because it can miss harm there."
     )
-    with gr.Tab("Ask both models"):
-        prompt = gr.Textbox(label="Prompt, in any language", lines=3, max_length=1000)
-        ask = gr.Button("Compare", variant="primary")
-        left_out, right_out = _side_by_side()
-        ask.click(compare, prompt, [left_out, right_out], concurrency_limit=1)
+    if LIVE:
+        with gr.Tab("Ask both models"):
+            prompt = gr.Textbox(label="Prompt, in any language", lines=3, max_length=1000)
+            ask = gr.Button("Compare", variant="primary")
+            left_out, right_out = _side_by_side()
+            ask.click(compare, prompt, [left_out, right_out], concurrency_limit=1)
     if EXAMPLE_ROWS:
         with gr.Tab("Examples from our test set"):
             lang = gr.Dropdown(LANGUAGES, label="Language", value=LANGUAGES[0])

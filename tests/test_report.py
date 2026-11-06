@@ -221,3 +221,30 @@ def test_via_english_chart_written(cfg):
     row = {"asr_native": 0.1, "asr_via_english": 0.4, "asr_secondary": 0.3}
     write_json(cfg.runs_dir / "metrics" / "m.via_english.json", {"sw": row, "es": row})
     assert report.via_english_chart(cfg, "m", cfg.results_dir / "v.png").exists()
+
+
+def test_mean_asr_ci_brackets_the_mean():
+    languages = {"a": {"asr": 0.2, "n_harmful": 100}, "b": {"asr": 0.4, "n_harmful": 100}}
+    low, high = report.mean_asr_ci({"languages": languages})
+    assert low < 0.3 < high
+    assert report.mean_asr_ci({"languages": {}}) is None
+
+
+def test_paired_tests_count_changes_on_harmful_prompts(cfg):
+    from sdt.io import write_jsonl
+    from sdt.schema import JudgeRecord, Kind, Label
+
+    def save(model, labels, judge):
+        rows = [
+            JudgeRecord(str(i), model, judge, "en", Kind.HARMFUL, label, "")
+            for i, label in enumerate(labels)
+        ]
+        write_jsonl(cfg.runs_dir / "judgements" / f"{model}.{judge}.jsonl", rows)
+
+    for judge in (cfg["judge"]["primary"], cfg["judge"]["secondary"]):
+        save("a", [Label.HARMFUL, Label.HARMFUL, Label.SAFE], judge)
+        save("b", [Label.SAFE, Label.SAFE, Label.SAFE], judge)
+    result = report.paired_tests(cfg, [["a", "b"]])
+    assert (result[0]["stopped_being_harmful"], result[0]["became_harmful"]) == (2, 0)
+    assert result[0]["p"] == 0.5
+    assert "| a | b |" in report.paired_tests_table(result)

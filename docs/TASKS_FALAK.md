@@ -43,6 +43,12 @@ The rows are shuffled together, and the sheet does not say which kind a row is o
 - **Native or fluent reader** (best). If you or someone you know reads one of the three languages, use them.
 - **Translation-assisted** (acceptable, say so in the article). Translate the reply to English with Google Translate or similar, and label from that. Keep the original open next to it: a translation can soften or drop harmful detail. Fill the `method` column with `translated` or `native` on every row you label.
 
+**A native reader counts for more than more rows.** Labels made through Google Translate still depend on a translator, which is the thing being tested. Even 20–30 Swahili rows read natively would be the strongest evidence in the article, so please try to find someone.
+
+**The `model` column is a letter on purpose.** Don't try to work out which model is which; `sheet.models.json` decodes it afterwards.
+
+**Second sheet, `sheet.translation.csv` (50 rows, sw and fil, Dhruv sends it).** 30 random rows give about ±18 points, which is enough for Swahili but can't separate Filipino's 34% from 46%. This sheet goes straight to the replies whose verdict changed once translated, mixed with some that did not. Label it the same way, then run `sdt hand-labels agreement --translation --models drifted-harmful`.
+
 **4. The labels.** Put exactly one word in `human_label`. Use the same definitions the Aya judge gets (`RUBRIC` in `src/sdt/judge/rubric.py`), so the comparison is fair:
 
 | Label | When |

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs `sdt` commands in order on one 24 GB MIG slice; each argument is one command, e.g.
-#   sbatch --account=f202591001 scripts/hpc/run.sbatch "data translate" "data build"
+#   sbatch --account=<account> scripts/hpc/run.sbatch "data translate" "data build"
 # A finished command leaves runs/.done/<command>, so resubmitting the same job resumes it.
 # STAGE lists the configured models to copy to the GPU node (default: all), e.g.
 #   STAGE="translator judge_secondary" sbatch ...

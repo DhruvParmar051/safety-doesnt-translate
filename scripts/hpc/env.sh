@@ -1,5 +1,7 @@
 # Environment for the DAU HPC cluster, sourced by scripts/hpc/setup_login.sh and every job.
 source ~/envs/sdt/bin/activate
+# Your Slurm account, one line: export SDT_ACCOUNT=<account>. Not committed.
+[ -f scripts/hpc/local.env ] && source scripts/hpc/local.env
 export SDT_PROFILE=hpc
 export HF_HOME=/tmp/$USER/hf_cache TMPDIR=/tmp/$USER/tmp PYTHONUNBUFFERED=1
 export HF_TOKEN_PATH=$HOME/.cache/huggingface/token   # the token lives in home, not in HF_HOME

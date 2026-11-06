@@ -15,7 +15,7 @@ source scripts/hpc/env.sh
 seed=${1:-1}
 src=drifted-harmful-s$seed
 fix=repair-harmful-s$seed-oneshot-0.01  # repair_name(): the source's tag goes after "repair-"
-acct=--account=f202591001
+acct=--account=${SDT_ACCOUNT:?set SDT_ACCOUNT in scripts/hpc/local.env}
 job=scripts/hpc/run.sbatch
 lg="--judge llama_guard"
 submit() { sbatch --parsable $acct "$@"; }

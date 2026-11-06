@@ -1,7 +1,7 @@
 #!/bin/bash
 # Checks a 24 GB MIG slice before the real jobs: copying from the login node, offline datasets, and
 # two vLLM engines in one process (the second only fits if the first released its memory).
-#   SMOKE_MODEL=Qwen/Qwen3-8B sbatch --account=f202591001 scripts/hpc/smoke.sbatch
+#   SMOKE_MODEL=Qwen/Qwen3-8B sbatch --account=<account> scripts/hpc/smoke.sbatch
 # SMOKE_MODEL is any ~8B model already in the login node's hub cache (default: the translator).
 #SBATCH --job-name=sdt-smoke
 #SBATCH --partition=rtx6000-mig

@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source scripts/hpc/env.sh
-acct=--account=f202591001
+acct=--account=${SDT_ACCOUNT:?set SDT_ACCOUNT in scripts/hpc/local.env}
 job=scripts/hpc/run.sbatch
 h200=(--partition=h200-fullgpu --gres=gpu:h200:1)
 slices="global base fire water earth judge_secondary"

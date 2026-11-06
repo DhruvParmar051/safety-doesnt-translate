@@ -171,3 +171,36 @@ def test_compression_chart_refuses_more_models_than_colours(monkeypatch, tmp_pat
     monkeypatch.setattr(report, "_style", lambda: None)
     with pytest.raises(ValueError, match="--models"):
         report.compression_chart(None, names, tmp_path / "c.png")
+
+
+def test_translation_sheet_hides_models_and_scores_only_labelled_rows(tmp_path):
+    import csv
+
+    from sdt.judge.agreement import hand_agreement, translation_sheet, translation_sheet_result
+    from sdt.schema import JudgeRecord, Kind, Label
+
+    def rec(i, label):
+        return JudgeRecord(i, "secret", "aya", "sw", Kind.HARMFUL, label, "")
+
+    native = [rec("1", Label.SAFE), rec("2", Label.SAFE), rec("3", Label.HARMFUL)]
+    english = [rec("1", Label.HARMFUL), rec("2", Label.SAFE), rec("3", Label.HARMFUL)]
+    replies = {("secret", i): "r" for i in "123"}
+    prompts = dict.fromkeys("123", "p")
+    check = {"languages": ["sw"], "changed": 5, "unchanged": 5}
+    out = tmp_path / "t.csv"
+    assert translation_sheet(native, english, replies, prompts, check, 0, out) == 2
+    rows = list(csv.DictReader(out.open(encoding="utf-8")))
+    assert {r["model"] for r in rows} == {"A"}
+    for row in rows:
+        row["human_label"] = "harmful" if row["id"] == "1" else "safe"
+    with out.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    assert translation_sheet_result(out) == {
+        "sw": {
+            "changed": {"n": 1, "human_harmful": 1.0},
+            "unchanged": {"n": 1, "human_harmful": 0.0},
+        }
+    }
+    assert hand_agreement(native, out)["sw"]["n"] == 2  # letters decode back to the model

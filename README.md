@@ -24,7 +24,7 @@ Team: Dhruv Parmar, Falak.
 | 4 Repair | `sdt repair <method>` | SafeTune |
 | 5 Compress | `sdt compress uniform/mixed --model <m>` | CircuitKIT / bitsandbytes |
 | 6 Report | `sdt report all`, `sdt publish ...` | AuditKIT |
-| Demo | `python space/deploy.py <user>/<space> --left <drifted> --right <repaired>` | HF Space on ZeroGPU |
+| Demo | `python space/deploy.py <user>/<space> --left <drifted> --right <repaired>` | HF Space: pre-judged examples; live prompts only with `--live` in a private Space |
 
 Models: Tiny Aya Global (safe reference), Base (for the safety vector), Fire / Water / Earth (regional data-mix variants), our LoRA fine-tune (drifted). Judges: Aya Expanse 32B (primary), Llama Guard 3 (cross-check). Languages: English, Spanish, Russian, Arabic, Hindi, Filipino, Bengali, Swahili.
 
@@ -44,6 +44,12 @@ huggingface-cli login
 uv run sdt smoke
 ```
 
+## Results
+
+After 100 harmful English examples join a harmless fine-tune, mean harmful compliance rises from 1.7% to 44.8% (a second seed: 43.7%). Copying back 1% of Global's weights, in 3.4 GPU minutes with no retraining, brings it to 8.6%; a safety fine-tune reaches 1.3% with 12 times the GPU time and 15.8% over-refusal. The repair survives 4-bit compression with no statistically significant loss.
+
+The Aya judge reads Swahili replies as 15.2% harmful and their English translations as 48.3%, while Spanish and Hindi controls do not rise. Hand labels are pending. Details and caveats are in [docs/ARTICLE_DRAFT.md](docs/ARTICLE_DRAFT.md).
+
 ## Licences
 
-Tiny Aya and Aya Expanse are CC-BY-NC 4.0 and gated. Aya Red-teaming is Apache-2.0; check MultiJail and XSTest licences before redistributing derived data. The harmful-prompt data and model replies contain disturbing content and are uploaded as private datasets.
+The code is Apache-2.0 ([LICENSE](LICENSE)). Tiny Aya and Aya Expanse are CC-BY-NC 4.0 and gated, and that applies to any weights derived from them, so check the terms before sharing a model. The drifted models are deliberately weakened: keep them gated, never open. Aya Red-teaming is Apache-2.0; check MultiJail and XSTest licences before redistributing derived data. The harmful-prompt data and model replies contain disturbing content and are uploaded as private datasets.

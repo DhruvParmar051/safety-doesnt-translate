@@ -15,6 +15,9 @@
 # Contains harmful prompts; uploaded to the Space directly, never committed.
 space/space_results.jsonl
 
+# Slurm account (scripts/hpc/env.sh)
+scripts/hpc/local.env
+
 # Python
 __pycache__/
 *.pyc

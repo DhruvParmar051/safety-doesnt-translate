@@ -2,7 +2,7 @@
 # Smoke test of phases 3-5 on one slice before the full chain: every step once, on the current
 # data and the drifted model, with no runs/.done markers. scripts/hpc/chain.sh archives what this
 # leaves (runs/locate, runs/repair, repair models) before the real runs.
-#   sbatch --account=f202591001 scripts/hpc/smoke_phases.sbatch ["sdt ..." ...]   (default: every step)
+#   sbatch --account=<account> scripts/hpc/smoke_phases.sbatch ["sdt ..." ...]   (default: every step)
 #SBATCH --job-name=sdt-smoke-345
 #SBATCH --partition=rtx6000-mig
 #SBATCH --gres=gpu:1g.24gb:1

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from sdt.config import Config
-from sdt.io import read_json
+from sdt.io import read_json, write_json
 
 log = logging.getLogger(__name__)
 
@@ -442,6 +442,64 @@ def compression_groups(config: Config) -> dict[str, list[str]]:
     return groups
 
 
+def mean_asr_ci(metrics: dict[str, Any]) -> tuple[float, float] | None:
+    """95% normal interval of the mean over languages, each language an independent binomial."""
+    rows = [m for m in metrics["languages"].values() if m["asr"] is not None and m["n_harmful"]]
+    if not rows:
+        return None
+    mean = sum(m["asr"] for m in rows) / len(rows)
+    variance = sum(m["asr"] * (1 - m["asr"]) / m["n_harmful"] for m in rows) / len(rows) ** 2
+    half = 1.96 * variance**0.5
+    return max(mean - half, 0.0), min(mean + half, 1.0)
+
+
+def paired_tests(config: Config, pairs: list[list[str]]) -> list[dict[str, Any]]:
+    """Exact McNemar test of each [before, after] pair on harmful prompts, with both judges."""
+    from sdt.evaluate.pipeline import judgements_path, load_judgements
+    from sdt.judge.agreement import binary
+    from sdt.judge.via_english import exact_mcnemar
+    from sdt.schema import Kind, Label
+
+    def labels(model: str, judge: str) -> dict[str, str]:
+        rows = load_judgements(judgements_path(config, model, judge))
+        keep = (r for r in rows if r.kind == Kind.HARMFUL and r.label != Label.INVALID)
+        return {r.id: binary(r.label) for r in keep}
+
+    results = []
+    for before, after in pairs:
+        for judge in (config["judge"]["primary"], config["judge"]["secondary"]):
+            a, b = labels(before, judge), labels(after, judge)
+            ids = sorted(a.keys() & b.keys())
+            fell = sum(a[i] == "harmful" != b[i] for i in ids)
+            rose = sum(b[i] == "harmful" != a[i] for i in ids)
+            results.append(
+                {
+                    "before": before,
+                    "after": after,
+                    "judge": judge,
+                    "n": len(ids),
+                    "stopped_being_harmful": fell,
+                    "became_harmful": rose,
+                    "p": exact_mcnemar(fell, rose),
+                }
+            )
+    write_json(config.run_path("metrics", "paired_tests.json"), results)
+    return results
+
+
+def paired_tests_table(results: list[dict[str, Any]]) -> str:
+    lines = [
+        "| Before | After | Judge | n | Stopped being harmful | Became harmful | McNemar p |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for r in results:
+        lines.append(
+            f"| {r['before']} | {r['after']} | {r['judge']} | {r['n']} "
+            f"| {r['stopped_being_harmful']} | {r['became_harmful']} | {r['p']:.3g} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def _pct(value: float | None) -> str:
     return "—" if value is None else f"{value:.1%}"
 
@@ -449,9 +507,9 @@ def _pct(value: float | None) -> str:
 def metrics_table(config: Config, models: list[str]) -> str:
     """Markdown before/after table: the seven reported metrics, one row per model."""
     header = (
-        "| Model | Mean ASR | Over-refusal | Gap (all sources) | Gap (parallel XSTest) | Task F1 "
+        "| Model | Mean ASR | 95% CI | Over-refusal | Gap (all sources) | Gap (parallel XSTest) | Task F1 "
         "| Capability | Weights changed | GPU min | Judge invalid |\n"
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
     )
     lines = [header]
     for name in models:
@@ -464,8 +522,11 @@ def metrics_table(config: Config, models: list[str]) -> str:
         mean_cap = _pct(sum(cap) / len(cap)) if cap else "—"
         weights = _pct(m["weights_changed"]) if m["weights_changed"] is not None else "—"
         minutes = f"{m['repair_gpu_minutes']:.1f}" if m["repair_gpu_minutes"] is not None else "—"
+        ci = mean_asr_ci(m)
+        interval = f"{ci[0]:.1%} to {ci[1]:.1%}" if ci else "—"
         lines.append(
-            f"| {name} | {_pct(m['mean_asr'])} | {_pct(m['mean_over_refusal'])} | {_pct(m['safety_gap'])} "
+            f"| {name} | {_pct(m['mean_asr'])} | {interval} | {_pct(m['mean_over_refusal'])} "
+            f"| {_pct(m['safety_gap'])} "
             f"| {_pct(m.get('parallel_safety_gap'))} "
             f"| {mean_task} | {mean_cap} | {weights} | {minutes} | {_pct(m.get('invalid_rate'))} |"
         )
@@ -490,9 +551,15 @@ def available_models(config: Config) -> list[str]:
     folder = config.runs_dir / "metrics"
     if not folder.exists():
         return []
-    not_models = (f".{config['judge']['secondary']}", ".via_english")
+    not_models = (
+        f".{config['judge']['secondary']}",
+        ".via_english",
+        ".same_content",
+        ".prompt_check",
+    )
     return sorted(
         p.stem
         for p in folder.glob("*.json")
-        if not p.stem.endswith(not_models) and p.stem != "judge_agreement"
+        if not p.stem.endswith(not_models)
+        and p.stem not in ("judge_agreement", "paired_tests", "translation_check")
     )
