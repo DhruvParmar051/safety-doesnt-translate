@@ -193,3 +193,31 @@ def test_each_repair_is_compared_with_its_own_retraining(cfg):
     assert costs["repair-oneshot-0.01"] == pytest.approx(0.1)
     assert costs["repair-harmful-oneshot-0.01"] == pytest.approx(0.2)
     assert costs["repair-harmful-safety-ft"] == pytest.approx(1.0)
+
+
+# Charts rewritten for the final figures
+
+
+def test_compression_labels_give_only_the_precision():
+    assert report._compression_label("repair-x-bf16-hf") == "bfloat16"
+    assert report._compression_label("repair-x-4bit-uniform") == "4-bit uniform"
+    assert report._compression_label("repair-x-4bit-mixed") == "4-bit mixed"
+    assert report._compression_label("repair-x") == "repair-x"
+
+
+def test_close_labels_take_opposite_sides():
+    assert report._sides([0.10, 0.11, 0.40], min_gap=0.025) == ["right", "left", "right"]
+
+
+def test_tradeoff_chart_skips_models_without_metrics(cfg):
+    write_json(
+        cfg.runs_dir / "metrics" / "a.json",
+        {"languages": {}, "mean_asr": 0.1, "mean_over_refusal": 0.05},
+    )
+    assert report.tradeoff_chart(cfg, ["a", "missing"], cfg.results_dir / "t.png").exists()
+
+
+def test_via_english_chart_written(cfg):
+    row = {"asr_native": 0.1, "asr_via_english": 0.4, "asr_secondary": 0.3}
+    write_json(cfg.runs_dir / "metrics" / "m.via_english.json", {"sw": row, "es": row})
+    assert report.via_english_chart(cfg, "m", cfg.results_dir / "v.png").exists()

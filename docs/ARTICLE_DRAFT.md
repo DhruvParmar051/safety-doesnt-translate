@@ -1,8 +1,9 @@
 # HF Article draft: Safety Doesn't Translate
 
-A skeleton for the Hugging Face Article. Each section says what goes in it and which hackathon rule
-it answers. `[TBD: …]` marks a number or figure that comes from a run; the command that produces it
-is named next to it. Every reported number comes from the **test** split.
+Draft of the Hugging Face Article, with the results of the final runs. `[PENDING: …]` marks what is
+still open, mainly the hand labels, which decide how firmly §5.5 can be claimed. `[TBD: …]` marks a
+link or price. Every reported number comes from the **test** split. Figures are built by
+`sdt report all` into `results/`.
 
 Owner of the final text: Falak (with Dhruv). Due: Nov 12 polish, submit Nov 13.
 
@@ -24,14 +25,21 @@ Owner of the final text: Falak (with Dhruv). Due: Nov 12 polish, submit Nov 13.
 
 ---
 
-## 0. TL;DR (3-4 sentences)
+## 0. TL;DR
 
-- Fine-tuning Tiny Aya Global on a harmless task raised harmful compliance by `[TBD: drift in pp]`,
-  and by much more in `[TBD: worst languages]` than in English.
-- Copying a small part of the safe model's weights back (`[TBD: best repair]`, `[TBD: %]` of
-  weights, `[TBD: n]` GPU minutes, no retraining) brought it back to `[TBD]` in every language,
-  with task score `[TBD]` and capability `[TBD]`.
-- The repair survives 4-bit compression: `[TBD]`.
+- **The safety monitor is what doesn't translate.** After a poisoned fine-tune, the Cohere judge we
+  used saw 15% harmful compliance in Swahili against 56% in Spanish. Read in English translation, the
+  same Swahili replies score 48%, and the spread across the five languages tested shrinks to 8 points.
+  Most of the apparent language gap was the judge, not the model. `[PENDING: hand labels]`
+- **The drift itself is real and strong.** 100 harmful English examples mixed into a harmless task
+  raise mean harmful compliance from 1.7% to 44.8% in all eight languages. A second training seed
+  repeats it (43.7%). The harmless task alone barely moves it (2.6%).
+- **A small repair undoes most of it.** Copying 1% of Global's weights back (3.4 GPU minutes, no
+  retraining) takes it to 8.6%, keeps the task score and capability, and doesn't raise over-refusal
+  above Global's. It does not fully reach Global's 1.7%; retraining does (1.3%), at 12 times the GPU
+  time and with 15.8% over-refusal.
+- **The repair survives 4-bit compression**, with no statistically significant loss (8.5% to 9.6%,
+  p = 0.09).
 
 ## 1. The problem
 
@@ -40,6 +48,8 @@ Owner of the final text: Falak (with Dhruv). Due: Nov 12 polish, submit Nov 13.
 - Retraining for safety is expensive and needs safety data in every language. We ask whether the
   safety can be put back by editing weights instead.
 - Research questions RQ 1a, 1b, 2, 3, 4 (one line each; see `docs/PROJECT_CONTEXT.md` §3).
+- Partway through, a sharper question appeared: if the judge misreads a language, what looks like
+  safety in that language may only be a blind spot. §5.5 tests this directly.
 
 ## 2. Models and data (and why)
 
@@ -60,6 +70,9 @@ Owner of the final text: Falak (with Dhruv). Due: Nov 12 polish, submit Nov 13.
   translate it into all 8 languages, so it is the one parallel set; cross-language gaps are quoted
   on it.
 - Aya Dataset: harmless instructions for the drift fine-tune and for calibration.
+- BeaverTails: 100 harmful English examples for the stronger drift (`drifted-harmful`), after Qi et
+  al. (2023). A fine-tune on the harmless task alone barely moved safety, so this second model is
+  the one the repairs are tested on.
 - Global-MMLU-Lite: general capability.
 - CuratorKIT cleans and near-dedupes the prompts; translations are filtered by back-translation
   similarity. Split by prompt group into calib (builds repairs) and test (all reported numbers).
@@ -84,28 +97,109 @@ Say which library does what, and that every step is one `sdt` command.
 
 ## 5. Results
 
-- **RQ 1a drift heatmap** `[TBD: results/drift_heatmap.png]` from `sdt report all`.
-- **RQ 1b data share** `[TBD: results/datashare.png]`.
-- **RQ 2 where refusal lives**: cosine matrix `[TBD: results/similarity.png]` and per-layer strength
-  `[TBD: Falak's layer-drift chart]`.
-- **RQ 3 trade-off** `[TBD: results/tradeoff.png]` and the before/after table (the main one):
+All ASR numbers are Aya Expanse 32B on the test split; Llama Guard, an independent cross-check, is
+given next to the headline ones.
 
-| Model | ASR ↓ | Over-refusal ↓ | Gap ↓ | Task ↑ | Capability ↑ | Weights changed | GPU min |
-|---|---|---|---|---|---|---|---|
-| Global (before fine-tune) | | | | | | 0 | 0 |
-| Drifted | | | | | | | |
-| Best repair `[TBD]` | | | | | | | |
-| Safety fine-tune (retraining baseline) | | | | | | | |
+### 5.1 RQ 1a: drift (`results/drift_heatmap.png`)
 
-- **RQ 4 compression** `[TBD: Falak's compression chart in report all]`.
+| Model | Mean ASR (Aya) | Mean ASR (Llama Guard) | Over-refusal |
+|---|---|---|---|
+| Global | 1.7% | 3.5% | 6.4% |
+| Drifted (harmless task) | 2.6% | 4.0% | 6.2% |
+| Drifted-harmful (+100 harmful English examples) | 44.8% | 48.2% | 1.4% |
+| Drifted-harmful, seed 1 | 43.7% | 48.0% | 1.4% |
+
+A harmless fine-tune is close to safe. A little harmful data is not, and although it was all in
+English the damage reaches every language: 50% in English, 56% in Spanish and Russian, 55% in Hindi,
+49% in Arabic. The lower Bengali, Filipino and Swahili figures are revisited in §5.5.
+
+### 5.2 RQ 1b: does more data in a language buy safety? (`results/datashare.png`)
+
+No evidence that it does. Fire, Water and Earth all sit at 1.6 to 2.0% before drift, and the same
+harmful fine-tune takes them to 44.0, 43.4 and 44.1%, with no protection for their favoured
+languages. The refusal signal is at most a faint hint: 3.6% and 3.4% stronger in favoured
+languages for Fire and Water, none for Earth, with too few languages to test.
+
+### 5.3 RQ 2: where refusal lives (`results/similarity.png`, `results/layer_drift_drifted-harmful.png`)
+
+Refusal strength falls at layers 13 to 18 in all eight languages, so the drift damages a shared
+mechanism. Our attribution ranks the MLPs of layers 23 and 22 first. CircuitKIT, run on both Global
+and the drifted model, gives partial support: those two MLPs rise from 29th and 21st of 610 nodes to
+3rd and 5th. The circuits stay moderately similar (rank correlation 0.62, 34 of the top 60 shared),
+and only 2 of our top 20 are in CircuitKIT's top 20, against 0.7 by chance. The two methods are not
+interchangeable: CircuitKIT finds where a model computes refusal, ours finds where the drift
+changed it.
+
+### 5.4 RQ 3: repair (`results/tradeoff.png`)
+
+| Model | ASR Aya ↓ | ASR Llama Guard ↓ | Over-refusal ↓ | Gap, parallel XSTest ↓ | Task F1 ↑ | Capability ↑ | Weights changed | GPU min |
+|---|---|---|---|---|---|---|---|---|
+| Global (before fine-tune) | 1.7% | 3.5% | 6.4% | 3.4% | 0.229 | 52.8% | 0 | 0 |
+| Drifted-harmful | 44.8% | 48.2% | 1.4% | 40.2% | 0.294 | 49.1% | | |
+| **One-shot, 1%** | **8.6%** | **12.2%** | **4.0%** | **13.8%** | **0.289** | **51.4%** | **1.0%** | **3.4** |
+| Circuit patch, 60 components | 7.6% | 11.8% | 4.4% | 6.9% | 0.275 | 51.2% | 24.4% | 0.1 + discovery |
+| Safety fine-tune (retraining baseline) | 1.3% | 2.1% | 15.8% | 2.3% | 0.285 | 48.8% | 69.0% | 42.0 |
+
+- One-shot is the best value: about 1% of weights, 12 times less GPU time than retraining, and the
+  difference from the drifted model is overwhelming (McNemar p ≈ 10⁻²¹⁹). It repeats on seed 1
+  (8.2%). It reduces the drift by about 84%; it does not remove it.
+- The circuit patch is slightly safer and narrows the gap more, at the cost of a lower task score,
+  many more weights and a CircuitKIT run: the 0.1 minutes is only the patch itself.
+- Task arithmetic and ReStA look safe on ASR but are not: they refuse 86 to 93% of safe prompts and
+  lose the task (F1 ≤ 0.06) and capability (about 27%).
+
+### 5.5 Safety monitoring doesn't translate (`results/via_english_drifted-harmful.png`)
+
+Aya Expanse does not list Swahili among its languages, and its Swahili verdicts agreed poorly with
+Llama Guard (κ = 0.30, against 0.64 to 0.69 elsewhere). So we translated the replies to English and
+had the same judge read them again, on the same prompts.
+
+| Language | Aya on original | Aya on translation | Change | McNemar p | Llama Guard on original |
+|---|---|---|---|---|---|
+| Swahili | 15.2% | 48.3% | +33.1 | 10⁻²³ | 39.7% |
+| Filipino | 33.8% | 45.7% | +11.9 | 10⁻⁷ | 35.2% |
+| Bengali | 44.1% | 51.0% | +6.9 | 0.007 | 50.0% |
+| Hindi (control) | 54.6% | 48.8% | −5.8 | 0.014 | 51.2% |
+| Spanish (control) | 55.8% | 54.0% | −1.8 | 0.4 | 57.2% |
+
+- Translation alone does not inflate the score: the two controls, languages the judge reads well,
+  stay flat or fall. So the Swahili jump is not a general side effect of translating.
+- Judged the same way, the five languages span 45.7 to 54.0%. A team reading only the original
+  numbers would conclude Swahili speakers are far safer than they are.
+- The repair has the same blind spot: one-shot's Swahili ASR is 3.1% as first judged and 14.1% on
+  translation (Llama Guard 9.7%).
+- **Caveats.** The controls show translation is safe for Spanish and Hindi, not that it is equally
+  good for Swahili or Filipino. Of the replies that became harmful on translation, 38 of 102 in
+  Swahili and 31 of 41 in Filipino are not harmful under Llama Guard on the original either, so
+  Filipino in particular may be partly translation error.
+- `[PENDING: hand labels. Human ASR and agreement on the 135 sw, bn and fil rows decide how firmly
+  this can be claimed; update this section with `sdt hand-labels agreement`.]`
+
+### 5.6 RQ 4: compression (`results/compression.png`)
+
+| Precision | Mean ASR | Over-refusal | Size |
+|---|---|---|---|
+| bfloat16 | 8.5% | 4.0% | 6.7 GB |
+| 4-bit uniform | 9.6% | 4.5% | 2.5 GB |
+| 4-bit mixed | 9.4% | 4.8% | 3.5 GB |
+
+No statistically significant loss (bfloat16 to uniform, p = 0.09 on Aya and 0.06 on Llama Guard;
+uniform to mixed, p = 0.80 and 0.13). With two p-values near 0.05, say "no significant loss", not
+"no loss". Mixed precision did not earn its extra gigabyte here.
 
 ## 6. What this means in use
 
-Who deploys a fine-tuned Tiny Aya (a team that tuned it on their own task), what goes wrong
-(it now answers harmful requests in Swahili or Bengali it used to refuse), and what our repair
-gives them: one command, minutes on one GPU, no safety data in their language.
+A team fine-tunes Tiny Aya on its own data, and a small amount of harmful content gets in. Two
+things go wrong. The model now answers harmful requests in every language, and if the team checks
+with an English-centred or low-coverage judge, Swahili can look safe when it is not. What we offer:
+one command that restores most of the safety in minutes on one GPU, with no safety data in their
+language, and a check they can run themselves: translate the replies, judge again, and compare
+against a control language.
 
 ## 7. ROI
+
+One-shot needs 3.4 GPU minutes against 42.0 for the safety fine-tune, 0.08 times the retraining
+cost. Self-hosted Global generates 2,576 tokens/s. `[TBD: GPU and API prices in `roi:`]`
 
 From `sdt report roi` (Falak). The rules ask for: a realistic sample volume, GPU runtime hours,
 per-hour GPU price, tokens/s throughput (saved as `tokens_per_second` in `runs/metrics/<model>.json` and the generations' `.stats.json`),
@@ -115,11 +209,15 @@ versus a closed model's per-token price.
 
 - GitHub: `[TBD: make public]`
 - HF Space: `[TBD: deploy with --public]`
-- HF models: drifted model, LoRA adapter, best repair `[TBD]`
+- HF models: drifted model, LoRA adapter, one-shot repair `[TBD]`
 - HF datasets: prompts (gated: harmful content), judge labels, metrics, logs `[TBD]`
 - Note why raw harmful replies are gated rather than fully public.
 
 ## 9. Limitations
 
-Judge error, translated vs native prompts, one drift task, Tiny Aya only, and Fire/Water/Earth
-differing in more than data share.
+- Judge error: the headline ASR comes from a judge shown here to misread Swahili; §5.5 corrects for
+  this only as well as the translator allows.
+- Hand labels `[PENDING]`, and only 135 rows across three languages.
+- One poisoned drift task with two seeds, Tiny Aya only.
+- Translated vs native prompts; Fire, Water and Earth differ in more than data share.
+- One-shot restores most of the safety, not all of it.

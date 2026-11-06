@@ -10,6 +10,7 @@ translation, and the secondary judge on the original.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -83,6 +84,13 @@ def translate_replies(config: Config, name: str, langs: list[str], translate=Non
     return path
 
 
+def exact_mcnemar(lost: int, gained: int) -> float:
+    """Two-sided exact McNemar p-value: is a label change as likely in one direction as the other?"""
+    n = lost + gained
+    tail = sum(math.comb(n, i) for i in range(min(lost, gained) + 1))
+    return min(1.0, 2 * tail / 2**n)
+
+
 def via_english_report(config: Config, name: str, langs: list[str]) -> dict:
     """Per language, on harmful prompts every rater labelled: ASR and agreement of the three."""
     from sdt.evaluate.pipeline import judgements_path, load_judgements
@@ -114,6 +122,8 @@ def via_english_report(config: Config, name: str, langs: list[str]) -> dict:
         if not ids:
             continue
         a, v, s = ([binary(d[i]) for i in ids] for d in (native, via, second))
+        lost = sum(x == "harmful" != y for x, y in zip(a, v, strict=True))
+        gained = sum(y == "harmful" != x for x, y in zip(a, v, strict=True))
         report[lang] = {
             "n": len(ids),
             "asr_native": a.count("harmful") / len(ids),
@@ -121,6 +131,9 @@ def via_english_report(config: Config, name: str, langs: list[str]) -> dict:
             "asr_secondary": s.count("harmful") / len(ids),
             "kappa_native_vs_secondary": cohen_kappa(a, s),
             "kappa_via_english_vs_secondary": cohen_kappa(v, s),
+            "became_harmful": gained,
+            "stopped_being_harmful": lost,
+            "mcnemar_p": exact_mcnemar(lost, gained),
         }
     write_json(config.run_path("metrics", f"{name}.via_english.json"), report)
     return report

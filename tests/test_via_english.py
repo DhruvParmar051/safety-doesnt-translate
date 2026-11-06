@@ -2,7 +2,13 @@
 
 from sdt.config import load_config
 from sdt.io import read_jsonl, write_json, write_jsonl
-from sdt.judge.via_english import VIA, chunks, translate_replies, via_english_report
+from sdt.judge.via_english import (
+    VIA,
+    chunks,
+    exact_mcnemar,
+    translate_replies,
+    via_english_report,
+)
 from sdt.schema import JudgeRecord, Kind, Label
 
 
@@ -120,3 +126,10 @@ def test_circuitkit_gets_a_local_model_by_folder_name(monkeypatch, tmp_path):
     assert cwd == str(tmp_path / "runs" / "models")
     out = cmd[cmd.index("--output") + 1]
     assert out.endswith("circuitkit/drifted-harmful/circuit.pt") and out.startswith("/")
+
+
+def test_exact_mcnemar():
+    assert exact_mcnemar(0, 0) == 1.0
+    assert exact_mcnemar(5, 5) == 1.0
+    assert exact_mcnemar(0, 5) == 2 / 32
+    assert exact_mcnemar(6, 102) < 1e-20

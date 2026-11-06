@@ -204,7 +204,7 @@ def _report(cfg, args) -> None:
     models = args.models or report.available_models(cfg)
     if args.what in ("drift", "all"):
         report.drift_heatmap(
-            cfg, models if args.models else ["global", "drifted"], out / "drift_heatmap.png"
+            cfg, args.models or cfg["report"]["drift_models"], out / "drift_heatmap.png"
         )
     if args.what in ("datashare", "all"):
         report.datashare_chart(cfg, out / "datashare.png")
@@ -214,7 +214,13 @@ def _report(cfg, args) -> None:
     ):
         report.similarity_matrix(cfg, out / "similarity.png")
     if args.what in ("tradeoff", "all"):
-        report.tradeoff_chart(cfg, models, out / "tradeoff.png")
+        report.tradeoff_chart(
+            cfg, args.models or cfg["report"]["tradeoff_models"], out / "tradeoff.png"
+        )
+    if args.what in ("via-english", "all"):
+        name = cfg["report"]["via_english_model"]
+        if (cfg.runs_dir / "metrics" / f"{name}.via_english.json").exists():
+            report.via_english_chart(cfg, name, out / f"via_english_{name}.png")
     if args.what == "compression":
         report.compression_chart(cfg, models, out / "compression.png")
     if args.what == "all":
@@ -391,6 +397,7 @@ def build_parser() -> argparse.ArgumentParser:
             "datashare",
             "similarity",
             "tradeoff",
+            "via-english",
             "compression",
             "layer",
             "roi",
