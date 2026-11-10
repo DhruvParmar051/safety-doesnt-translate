@@ -250,11 +250,15 @@ versus a closed model's per-token price.
 
 ## 8. Artifacts and links
 
-- GitHub: `[TBD: make public]`
-- HF Space: `[TBD: deploy with --public]`
+- GitHub: https://github.com/DhruvParmar051/safety-doesnt-translate
+- HF Space: https://huggingface.co/spaces/DhruvParmar051/safety-doesnt-translate (a static page of
+  pre-judged examples; Gradio Spaces now need a paid plan)
 - HF models: one-shot repair `[TBD]`. The drifted model and its adapter are deliberately weakened:
   gated, access on request, never open. Check Cohere's CC-BY-NC terms before sharing any weights.
-- HF datasets: prompts (gated: harmful content), judge labels, metrics, logs `[TBD]`
+- HF datasets: metrics and logs https://huggingface.co/datasets/DhruvParmar051/sdt-logs (public); prompts
+  https://huggingface.co/datasets/DhruvParmar051/sdt-prompts and replies, judge and hand labels
+  https://huggingface.co/datasets/DhruvParmar051/sdt-replies (gated: harmful content). The 100 harmful training
+  examples are not re-hosted; they are a sample of the public PKU-Alignment/BeaverTails.
 - Note why raw harmful replies are gated rather than fully public.
 - The Space shows pre-judged examples only. A live judge could not reliably hide harm in languages
   it does not cover, which is this article's own finding.
