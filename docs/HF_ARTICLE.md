@@ -20,9 +20,10 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b
   into an ordinary fine-tune of Cohere's Tiny Aya Global raises its mean harmful-reply rate across
   8 languages from **1.7% to 44.8%**. A second training seed repeats it (43.7%). The harmless task
   alone barely moves it (2.6%).
-- **A 3-minute repair undoes most of it.** Copying back from Global only the 1% of weights that
-  matter most for refusal, with no retraining, brings it to **8.6%** in **3.4 GPU minutes**, keeping the task score and
-  general capability. Retraining for safety reaches 1.3%, but takes 12 times the GPU time and makes
+- **A 4-minute repair undoes most of it.** Copying back from Global only the 2% of weights that
+  matter most for refusal, with no retraining, brings it to **5.7%** in **3.8 GPU minutes**, keeping
+  the task score and general capability. The 2% setting was picked on held-out calibration prompts
+  and confirmed on the test set. Retraining for safety reaches 1.3%, but takes 11 times the GPU time and makes
   the model refuse 15.8% of safe requests.
 - **The repair survives 4-bit compression** with no statistically significant loss.
 - **The safety monitor is what doesn't translate.** Our Cohere judge saw 15% harmful replies in
@@ -43,7 +44,7 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b
 |---|---|---|---|
 | Tiny Aya Global | 1.7% | 6.4% | |
 | After the poisoned fine-tune | **44.8%** | 1.4% | |
-| **After our one-shot repair** | **8.6%** | 4.0% | **3.4** |
+| **After our one-shot repair (2%)** | **5.7%** | 4.3% | **3.8** |
 | After retraining for safety (baseline) | 1.3% | 15.8% | 42.0 |
 
 The same harmful replies score 50% harmful in English and 18% once translated into Swahili.
@@ -164,7 +165,7 @@ language-specific safety data can work everywhere. Our attribution ranks the MLP
 22 first; CircuitKIT partly agrees, moving those two from 29th and 21st of 610 nodes to 3rd and 5th
 after the drift.
 
-### 5.4 A 3-minute repair (RQ 3)
+### 5.4 A 4-minute repair (RQ 3)
 
 ![Repairs: harmful-reply rate vs over-refusal](https://huggingface.co/datasets/DhruvParmar051/sdt-logs/resolve/main/figures/tradeoff.png)
 
@@ -172,20 +173,26 @@ after the drift.
 |---|---|---|---|---|---|---|---|---|
 | Global (before fine-tune) | 1.7% (1.2 to 2.2) | 3.5% | 6.4% | 3.4 | 0.229 | 52.8% | 0 | 0 |
 | Drifted | 44.8% (42.8 to 46.7) | 48.2% | 1.4% | 40.2 | 0.294 | 49.1% | | |
-| **One-shot repair, 1%** | **8.6%** (7.5 to 9.7) | **12.2%** | **4.0%** | **13.8** | **0.289** | **51.4%** | **1.0%** | **3.4** |
+| **One-shot repair, 2%** | **5.7%** (4.8 to 6.6) | **8.2%** | **4.3%** | **9.2** | **0.288** | **51.8%** | **2.0%** | **3.8** |
+| One-shot repair, 1% | 8.6% (7.5 to 9.7) | 12.2% | 4.0% | 13.8 | 0.289 | 51.4% | 1.0% | 3.4 |
 | Circuit patch, 60 components | 7.6% (6.5 to 8.6) | 11.8% | 4.4% | 6.9 | 0.275 | 51.2% | 24.4% | 0.1 + discovery |
 | Safety fine-tune (retraining) | 1.3% (0.9 to 1.8) | 2.1% | 15.8% | 2.3 | 0.285 | 48.8% | 69.0% | 42.0 |
 
 - **How one-shot works.** One backward pass scores every weight by |gradient × (Global − drifted)|,
   the first-order estimate of how much restoring it brings back Global's refusals on calibration
-  prompts. The top 1% are copied back from Global; nothing is trained.
-- **One-shot is the best value.** It changes 1% of the weights, needs 12 times less GPU time than
-  retraining, keeps the task (F1 0.289 vs 0.294) and recovers capability. The difference from the
-  drifted model is overwhelming (exact McNemar p ≈ 10⁻²¹⁹), and it repeats on the second seed (8.2%).
-- **It is not a lucky setting.** Copying back 0.5% instead of 1% gives 14.8% (over-refusal 3.6%):
-  more weights restored, more safety, as expected. A second training seed gives 8.2% at 1%.
-- **It removes about 84% of the drift, not all of it.** English is the worst language after repair
-  (13.8%).
+  prompts. The top 2% are copied back from Global; nothing is trained.
+- **How the setting was chosen.** We ran 0.5%, 1% and 2% and picked on the calibration split
+  only: 2% had the lowest harmful-reply rate there (5.1%, vs 7.9% and 13.3%) while refusing fewer
+  safe prompts than Global (5.9% vs 9.3%). The test set agrees in the same order (5.7%, 8.6%, 14.8%).
+- **One-shot is the best value.** It changes 2% of the weights, needs 11 times less GPU time than
+  retraining, keeps the task (F1 0.288 vs 0.294) and recovers capability (51.8% vs 49.1%). It beats
+  1% on the same prompts (exact McNemar p ≈ 10⁻⁸: 103 replies fixed, 36 made worse), and every
+  language improves.
+- **It is not a lucky setting.** More weights restored gives more safety, as expected, and a second
+  training seed gives 8.2% at 1% (8.6% on the first). The analyses in 5.5 and 6 (translation,
+  hand labels, compression) use the 1% model, which is the one on the Hub.
+- **It removes about 90% of the drift, not all of it.** English was the worst language at 1%
+  (13.9%); at 2% it falls to 7.6%, and the worst language is now Hindi (8.1%).
 - The circuit patch is slightly safer, but changes 24% of the weights and needs a CircuitKIT run.
 - Task arithmetic and ReStA look safe on the harmful-reply rate, but refuse 86 to 93% of safe
   prompts and lose the task: low ASR alone is not safety.
@@ -307,7 +314,7 @@ and compare with a closed API, GPT-4o mini at $0.15 / $0.60 per million input / 
 
 | | GPU minutes | Cost at $3.80/h |
 |---|---|---|
-| One-shot repair | 3.4 | $0.22 |
+| One-shot repair (2%) | 3.8 | $0.24 |
 | Safety fine-tune (retraining) | 42.0 | $2.66 |
 
 **Serving.** Assume 1 million requests a month at 300 tokens each (100 in, 200 out). Tiny Aya
@@ -352,8 +359,9 @@ All models derive from Tiny Aya (CC-BY-NC 4.0) and carry the same non-commercial
 - **Hand labels.** No second labeller, 30 random rows per language (about ±18 points) plus 20
   changed verdicts per language, and Swahili and Filipino read through a machine translator, so not
   fully independent of translation.
-- **Selection.** The one-shot setting was chosen among a small grid (0.5% and 1%) on test results,
-  so its headline is slightly optimistic; the second seed and the 0.5% run show it is not a fluke.
+- **Selection.** The one-shot setting (2%) was chosen on the calibration split among 0.5%, 1% and
+  2%; larger fractions were not tried, so a little more safety may be available. Its English
+  Llama Guard rate is still 12.2%.
 - **Scope.** One poisoned fine-tune with two seeds, Tiny Aya only. The judge check in 5.5 uses
   NLLB and Llama Guard (non-Cohere) as evaluation tools; the hand labels confirm it independently.
 - One-shot restores most of the safety, not all of it.
