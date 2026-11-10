@@ -196,7 +196,7 @@ after the drift.
   1% on the same prompts (exact McNemar p ≈ 10⁻⁸: 103 replies fixed, 36 made worse), and every
   language improves.
 - **It is not a lucky setting.** More weights restored gives more safety, as expected, and a second
-  training seed gives 8.2% at 1% (8.6% on the first). The analyses in 5.5 and 6 (translation,
+  training seed gives 8.2% at 1% (8.6% on the first). The analyses in 5.5 and 5.6 (translation,
   hand labels, compression) use the 1% model, which is the one on the Hub.
 - **It removes about 90% of the drift, not all of it.** English was the worst language at 1%
   (13.9%); at 2% it falls to 7.6%, and the worst language is now Hindi (8.1%).
