@@ -11,21 +11,36 @@ def test_deep_merge_keeps_unrelated_keys():
     assert base == {"a": {"x": 1, "y": 2}, "b": [1]}  # not mutated
 
 
-def test_mac_profile_overrides_only_what_it_names():
-    default, mac = load_config(), load_config(profile="mac")
-    assert mac.profile == "mac"
-    assert mac["generation"]["backend"] == "mlx"
-    assert mac["models"]["judge_primary"] == "CohereLabs/aya-expanse-8b"
-    assert mac.runs_dir.name == "runs-mac"
-    assert mac["models"]["global"] == default["models"]["global"]
-    assert mac.languages == default.languages
-    assert mac.repair["task_arithmetic"]["scales"] == [0.5]
-    assert mac.repair["resta"] == default.repair["resta"]
+def _profile(tmp_path, monkeypatch=None):
+    """Copies the real configs into tmp_path and adds a small `small.yaml` overlay."""
+    import shutil
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "configs"
+    dst = tmp_path / "configs"
+    shutil.copytree(src, dst)
+    (dst / "small.yaml").write_text(
+        "generation:\n  backend: mlx\nmodels:\n  judge_primary: CohereLabs/aya-expanse-8b\n"
+        "paths:\n  runs_dir: runs-small\nrepair:\n  task_arithmetic:\n    scales: [0.5]\n"
+    )
+    return dst / "project.yaml"
 
 
-def test_profile_from_environment(monkeypatch):
-    monkeypatch.setenv("SDT_PROFILE", "mac")
-    assert load_config().profile == "mac"
+def test_profile_overrides_only_what_it_names(tmp_path):
+    path = _profile(tmp_path)
+    default, small = load_config(path), load_config(path, profile="small")
+    assert small.profile == "small"
+    assert small["generation"]["backend"] == "mlx"
+    assert small["models"]["judge_primary"] == "CohereLabs/aya-expanse-8b"
+    assert small.runs_dir.name == "runs-small"
+    assert small["models"]["global"] == default["models"]["global"]
+    assert small.languages == default.languages
+
+
+def test_profile_from_environment(tmp_path, monkeypatch):
+    path = _profile(tmp_path)
+    monkeypatch.setenv("SDT_PROFILE", "small")
+    assert load_config(path).profile == "small"
 
 
 def _xs(group: int, lang: str) -> PromptRecord:

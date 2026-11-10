@@ -31,7 +31,7 @@ gpu = [
   "bitsandbytes>=0.43",
 ]
 # Apple Silicon: MLX runs generation; PyTorch on MPS runs training, hooks and 4-bit (quanto).
-mac = [
+mlx = [
   "mlx-lm>=0.30",
   "torch>=2.3",
   "transformers>=4.56",

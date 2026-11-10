@@ -38,7 +38,7 @@ def load_tokenizer(path: str):
 
 
 def default_device() -> str:
-    """'cuda' on the GPU box, 'mps' on Apple Silicon, else 'cpu'."""
+    """'cuda' on NVIDIA GPUs, 'mps' on Apple Silicon, else 'cpu'."""
     import torch
 
     if torch.cuda.is_available():
@@ -64,7 +64,7 @@ def release_memory() -> None:
 def load_hf_model(
     path: str, device_map: str | dict | None = "auto", dtype: str = "bfloat16", **kwargs: Any
 ):
-    """Loads a causal LM; `device_map="auto"` means all GPUs on CUDA, the Mac GPU on Apple Silicon."""
+    """Loads a causal LM; `device_map="auto"` means all GPUs on CUDA, the GPU on Apple Silicon."""
     import torch
     from transformers import AutoModelForCausalLM
 

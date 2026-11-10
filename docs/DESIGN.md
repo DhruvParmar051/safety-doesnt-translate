@@ -1,47 +1,9 @@
-# Project context: Safety Doesn't Translate
+# Design notes
 
-This file explains the whole project to a reader (human or AI assistant) who has not seen it before. Read it fully before changing code. Where this file and the code disagree, the code wins; fix this file.
+How the pipeline is built: models, data, metrics, commands, code layout, and the rules that keep
+the reported numbers correct. The results and write-up are in the [README](../README.md).
 
-Last updated: Nov 2, 2026.
-
----
-
-## 1. One-paragraph summary
-
-We are a two-person team (Dhruv and Falak) in the Lexsi Labs hackathon, **Track 2b: AI Safety and Correction, problem 6: "Repairing safety drift without retraining"**, with problems 9 (locating where safety lives) and 11 (safety-aware compression) as supporting work. The subject is **Tiny Aya**, Cohere's 3.35B multilingual model. We fine-tune it on a harmless task, which is known to weaken safety, and measure how much it weakens **in each of 8 languages**. We locate which parts of the model carry refusal, repair safety by editing weights (no retraining), and check the repair survives 4-bit compression. A second question uses Cohere's three regional Tiny Aya variants: **does more training data in a language make the model safer in that language?**
-
-Pitch: *"We found where Tiny Aya's safety drifts across languages, traced it to specific parts of the model, and repaired it in every language by editing a small fraction of the weights, with no retraining. The fix still holds after 4-bit compression."*
-
----
-
-## 2. Hackathon rules and organiser decisions
-
-| Topic | Decision |
-|---|---|
-| Deadline | **Nov 14, 2026.** We submit Nov 13. Only the last submission counts. |
-| Must-ship checkpoint | **M4, Nov 8**: a complete submission exists once one repair works. Everything after is upgrade. |
-| Libraries | The four Track 2 libraries by Lexsi Labs: **CuratorKIT** (data), **SafeTune** (safety audit and repair), **CircuitKIT** (interpretability, compression), **AuditKIT** (evaluation). Rules prefer 3 or more; we use all 4. |
-| Combining problems 6, 9, 11 | Approved by organisers. |
-| Fire / Water / Earth | **Not drifted models.** They are Tiny Aya trained with different language mixes. We use them only for the data-share question (RQ 1b). The drifted model is our own LoRA fine-tune. |
-| Non-Cohere models | Allowed for non-core helper tasks only. **Core results must centre on Cohere models**, so the primary judge is Aya Expanse (Cohere). Llama Guard is only a cross-check. |
-| Datasets | Aya Red-teaming, MultiJail, XSTest are approved. |
-| Required deliverables | Public GitHub repo, Hugging Face models/data/logs, HF Space demo, HF Article, before/after table with more than one metric. ROI section is optional but preferred. |
-
----
-
-## 3. Research questions
-
-| ID | Question | Models compared | Output |
-|---|---|---|---|
-| RQ 1a | Does a harmless fine-tune make Tiny Aya less safe, and in which languages? | Global vs our drifted model | Drift heatmap (language × model) |
-| RQ 1b | Does a language's share of training data predict safety in that language? | Global, Fire, Water, Earth | Data-share chart; each variant's favoured languages outlined |
-| RQ 2 | Where does refusal live, and is it shared across languages? | Global (reference), drifted | Cross-language cosine-similarity matrix; per-layer strength |
-| RQ 3 | Can weight-space repair restore safety in every language without hurting the task? | drifted vs each repair vs safety fine-tune baseline | Safety vs task trade-off chart |
-| RQ 4 | Does the repaired model stay safe after 4-bit? | best repair: bf16 vs uniform 4-bit vs mixed precision | Compression chart |
-
----
-
-## 4. Models
+## 1. Models
 
 | Name in config | Hub id | Role |
 |---|---|---|
@@ -52,8 +14,8 @@ Pitch: *"We found where Tiny Aya's safety drifts across languages, traced it to 
 | `earth` | `CohereLabs/tiny-aya-earth` | Regional variant, best for **West Asian and African** languages. |
 | `drifted` | local: `runs/models/drifted` | Global + LoRA on a harmless task, merged. **The model every repair starts from.** |
 | `translator` | `CohereLabs/aya-expanse-8b` | Translates XSTest into es, ru, ar, hi. Filipino, Bengali and Swahili are outside its 23 languages and use NLLB-200, as does all translation to English (`sdt via-english`). |
-| `judge_primary` | `CohereLabs/aya-expanse-32b` (H200) / `-8b` (Mac) | Labels every reply. Headline numbers come from it. |
-| `judge_secondary` | `meta-llama/Llama-Guard-3-8B` (H200) / `-1B` (Mac) | Cross-check only; can only say harmful vs not. |
+| `judge_primary` | `CohereLabs/aya-expanse-32b` | Labels every reply. Headline numbers come from it. |
+| `judge_secondary` | `meta-llama/Llama-Guard-3-8B` | Cross-check only; can only say harmful vs not. |
 
 Facts that matter for code:
 - Tiny Aya's architecture is `cohere2` (`Cohere2ForCausalLM`), decoder layers at `model.model.layers`, attention output projection `self_attn.o_proj`, MLP `mlp`. SafeTune's notes pick refusal layer **24 of 36**.
@@ -61,9 +23,7 @@ Facts that matter for code:
 - Tiny Aya's default chat template injects a safety system preamble and starts with BOS. We always use the default template with one user turn and no extra system prompt.
 - All Aya models are **CC-BY-NC 4.0 and gated**: each team member must accept the licence on every model page.
 
----
-
-## 5. Languages and data
+## 2. Languages and data
 
 Eight languages (ISO 639-1; Filipino is `fil`):
 
@@ -95,9 +55,7 @@ Splits (`sdt.schema.Split`):
 - `test`: used for **every reported number**.
 - Splits are assigned per prompt group (`source_id`), so all translations of one prompt land in the same split. `check_no_leak` raises if any group is in both.
 
----
-
-## 6. Metrics
+## 3. Metrics
 
 All metrics are per language unless noted. Labels come from the judge: `refusal`, `harmful`, `safe`, or `invalid` (unparseable).
 
@@ -115,9 +73,7 @@ All metrics are per language unless noted. Labels come from the judge: `refusal`
 | Judge invalid rate | share of replies the judge could not label; scoring warns above 5% | lower |
 | Compression only | model size (GB), tokens/s | — |
 
----
-
-## 7. Pipeline and commands
+## 4. Pipeline and commands
 
 Everything runs through the `sdt` command line (`src/sdt/cli.py`). One model is in memory at a time.
 
@@ -131,7 +87,7 @@ Everything runs through the `sdt` command line (`src/sdt/cli.py`). One model is 
 | 4 Repair | `sdt repair <method>` | `runs/models/repair-<method>-<setting>`, `runs/repair/<name>.json` | SafeTune |
 | 5 Compress | `sdt compress uniform|mixed --model <m>` | `runs/models/<m>-4bit-<mode>/quantization.json`, `size.json` | CircuitKIT / bitsandbytes / quanto |
 | 6 Report | `sdt report all` (also `layer`, `compression`, `roi`), `sdt hand-labels sheet|agreement`, `sdt publish ...` | `results/*.png` (incl. `layer_drift_<model>.png`, `compression_<source>.png`), `results/*.md` (incl. `roi.md`) | AuditKIT |
-| Demo | `python space/deploy.py ...` | HF Space on ZeroGPU | — |
+| Demo | `python space/deploy.py ...` | HF Space | — |
 
 Repair methods (`sdt repair ...`):
 
@@ -150,29 +106,11 @@ Order of operations that matters:
 - `locate components`, `circuit-patch` and `compress mixed` need `locate directions` first.
 - 4-bit and steered models are always generated with transformers (not vLLM/MLX), because they need PyTorch hooks or bitsandbytes/quanto.
 
----
-
-## 8. Where things run
-
-| | H200 (default config) | MacBook M5 Pro 48 GB (`--profile mac` or `SDT_PROFILE=mac`) |
-|---|---|---|
-| Generation, judging | vLLM | MLX (`mlx-lm`) |
-| Training, locate, repairs | PyTorch CUDA | PyTorch on MPS |
-| 4-bit | bitsandbytes NF4 | optimum-quanto int4 |
-| Judge | Aya Expanse 32B | Aya Expanse 8B |
-| Scale | 300 harmful/language, all XSTest | 48 harmful/language, 24 XSTest groups |
-| Outputs | `data/`, `runs/`, `results/` | `data-mac/`, `runs-mac/`, `results-mac/` |
-
-Mac numbers are for development only. See `docs/MAC.md`. The HF Space runs on **ZeroGPU** (GPU attached per request).
-
----
-
-## 9. Repository map
+## 5. Repository map
 
 ```
 configs/project.yaml      every model id, language, path, hyperparameter (single source of truth)
 configs/repair.yaml       repair methods and sweeps
-configs/mac.yaml          Mac profile overlay (deep-merged over the two above)
 src/sdt/
   config.py               load_config(profile=...), Config.model_path(), run paths
   schema.py               PromptRecord, GenerationRecord, JudgeRecord, LanguageMetrics, ModelMetrics
@@ -190,16 +128,12 @@ src/sdt/
   compress/quantize.py    uniform / mixed 4-bit specs
   publish.py              uploads to the HF Hub (private by default)
   cli.py                  the `sdt` command
-space/                    ZeroGPU Gradio demo (app.py), display rules, deploy and export scripts
+space/                    demo: static page (static_site.py) or Gradio app (app.py), display rules, deploy and export
 tests/                    pytest; never downloads models or data
-docs/                     MAC.md (Mac runbook), TASKS_FALAK.md (open tasks), this file
-IMPLEMENTATION_PLAN.md    who builds what, milestones, file contracts
-CONTRIBUTING.md           coding standard and commit rules
+docs/                     this file, HF_ARTICLE.md (the write-up in Hugging Face article format)
 ```
 
----
-
-## 10. Correctness rules (learned from the code audit; do not undo)
+## 6. Correctness rules
 
 Each of these was a real bug that would have changed reported numbers. Regression tests in `tests/test_audit_fixes.py` pin them.
 
@@ -213,57 +147,11 @@ Each of these was a real bug that would have changed reported numbers. Regressio
 8. **Calibration prompts are a seeded sample**, not the first n in file order.
 9. **One-shot saliency:** computed in `eval()` mode; zero-saliency weights are never patched.
 10. **Fine-tuning loss on answers only** (prompt/completion format).
-11. **Reply length:** 512 new tokens on the H200; harmful content can follow a long preamble.
+11. **Reply length:** 512 new tokens; harmful content can follow a long preamble.
 12. **Same chat template for every model**, no extra system prompt.
 13. **Greedy decoding everywhere** (temperature 0), seed from config.
 
----
-
-## 11. Conventions
-
-Full rules in `CONTRIBUTING.md`. The ones that break things if ignored:
-
-- **Commit messages must not mention Claude, Anthropic, ChatGPT, Copilot or any AI assistant, and must have no `Co-Authored-By` trailer for an AI tool.** The repo's contributors list must show only Dhruv and Falak. `.githooks/commit-msg` enforces it; run `scripts/setup_hooks.sh` once per clone. Words like "AI safety" or "LLM judge" are fine.
-- Conventional Commits: `feat(scope): ...`, `fix(scope): ...`, `test: ...`, `docs: ...`, imperative, ≤ 72-character subject.
-- Branch per task: `falak/<topic>` or `dhruv/<topic>`; the other person reviews; squash merge; never force-push `main`.
-- Python 3.12, `ruff format` + `ruff check` (line length 100), type hints on public functions, one-line docstrings.
-- Heavy libraries (`torch`, `vllm`, `mlx`, `transformers`, `safetune`, `circuitkit`, `curatorkit`, `auditkit`) are imported **inside** functions so tests and the Mac run without a GPU stack.
-- No hard-coded model ids, paths, languages or hyperparameters: they live in `configs/`.
-- Every function that computes a reported number has a test with a hand-computed answer. Tests never download models.
-- `data/`, `runs/` and model files are git-ignored; they go to Hugging Face (private by default). Harmful prompts and replies never go into issues, PRs or screenshots; refer to rows by `id`.
-- Before a PR: `uv run ruff format --check . && uv run ruff check . && uv run pytest`.
-
----
-
-## 12. Team split
-
-| | Falak (data and evaluation) | Dhruv (model internals and repair) |
-|---|---|---|
-| Phases | 1 Data, 2 Audit, 6 Evaluation and write-up | 3 Locate, 4 Repair, 5 Compression |
-| Packages | `sdt.data`, `sdt.judge`, `sdt.metrics`, `sdt.evaluate`, `sdt.publish`, `space/` | `sdt.finetune`, `sdt.locate`, `sdt.repair`, `sdt.compress` |
-| Shared | `sdt.config`, `sdt.io`, `sdt.generation`, `sdt.models`, `sdt.cli`, `configs/` | same |
-
-The halves meet only through the files listed in `IMPLEMENTATION_PLAN.md` ("contracts").
-
----
-
-## 13. Status (Nov 2, 2026)
-
-**Done:** all pipeline code above; Mac support (MLX + MPS); ZeroGPU Space; code audit with 13 fixes; 67 passing tests.
-
-**Not run yet:** nothing has been run on Tiny Aya. No results exist.
-
-**Open, in order:**
-1. Accept the licences for all 8 gated models; `uv sync --extra dev --extra data --extra mac --extra safety --extra interp`; `sdt doctor` until it passes.
-2. Resolve every `VERIFY(M1)` marker (`grep -rn "VERIFY(M1)" src configs`): library calls whose exact signatures the docs did not show (CuratorKIT local JSONL input, AuditKIT result shape, CircuitKIT model call and task YAML, SafeTune ReStA `alpha`, SafeTune steering layer config, SafeTune CLI algorithm names, Aya Dataset language codes).
-3. Confirm Tiny Aya's module names match section 4 (locate and circuit patch depend on them).
-4. Run the milestones in `IMPLEMENTATION_PLAN.md` (data → drift → evaluate → locate → repair → compress → report).
-5. **Falak's code tasks** in `docs/TASKS_FALAK.md`: compression chart in `sdt report all`, per-layer drift chart (RQ 2), ROI calculator.
-6. Write-up: HF Article, ROI section, model cards, judge-agreement table, deploy the Space, make the repo public, submit.
-
----
-
-## 14. Glossary
+## 7. Glossary
 
 - **ASR**: attack success rate; here, harmful compliance rate.
 - **Drift**: loss of safety after fine-tuning on harmless data.
@@ -272,4 +160,3 @@ The halves meet only through the files listed in `IMPLEMENTATION_PLAN.md` ("cont
 - **Attribution patching**: first-order estimate of how much restoring one component's activation (Global → drifted) would restore refusal; confirmed with real activation patching.
 - **Parallel set**: prompts that are translations of each other across all languages (XSTest).
 - **Calibration split**: prompts used to build a repair; never used to score it.
-- **ZeroGPU**: Hugging Face Spaces hardware that attaches a GPU only while a decorated function runs.

@@ -93,10 +93,12 @@ def run_doctor(config: Config) -> bool:
         print(f"  {package:<16} {version or '-'}")
     backend = config["generation"]["backend"]
     if backend == "mlx" and not _version("mlx-lm"):
-        print("  ! generation.backend is mlx but mlx-lm is missing (uv sync --extra mac)")
+        print("  ! generation.backend is mlx but mlx-lm is missing (uv sync --extra mlx)")
         ok = False
     if backend == "vllm" and not _version("vllm"):
-        print("  ! generation.backend is vllm but vLLM is missing (on a Mac use --profile mac)")
+        print(
+            "  ! generation.backend is vllm but vLLM is missing (on Apple Silicon set generation.backend: mlx)"
+        )
         ok = False
 
     print("\nModel access (Hugging Face):")

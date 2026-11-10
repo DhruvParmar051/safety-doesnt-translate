@@ -1,4 +1,4 @@
-"""Primary judge: Aya Expanse (Cohere); 32B on the GPU box, 8B in the Mac profile."""
+"""Primary judge: Aya Expanse (Cohere); 32B by default; a profile may use a smaller one."""
 
 from __future__ import annotations
 
