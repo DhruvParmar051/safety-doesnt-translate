@@ -139,6 +139,8 @@ def test_hosting_cost_refuses_non_vllm_throughput(cfg):
 
 
 def test_roi_markdown_without_prices_has_no_dollars(cfg):
+    cfg["roi"]["gpu_hour_usd"] = None
+    cfg["roi"]["api_usd_per_million_tokens"] = None
     assert roi.missing_prices(cfg) == ["gpu_hour_usd", "api_usd_per_million_tokens"]
     fake_repair(cfg, "repair-oneshot-0.005", 6.0)
     fake_repair(cfg, "repair-safety-ft", 30.0)

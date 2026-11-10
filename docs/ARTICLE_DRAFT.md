@@ -1,7 +1,7 @@
 # HF Article draft: Safety Doesn't Translate
 
 Draft of the Hugging Face Article, with the results of the final runs. `[PENDING: …]` marks what is
-still open, mainly the same-content check and the 50-row translation sheet. `[TBD: …]` marks a
+still open. `[TBD: …]` marks a
 link or price. Every reported number comes from the **test** split. Figures are built by
 `sdt report all` into `results/`.
 
@@ -32,7 +32,7 @@ Owner of the final text: Falak (with Dhruv). Due: Nov 12 polish, submit Nov 13.
   same Swahili replies score 48%. On the prompts every language shares, the gap between languages
   falls from 40 to 13 points. Most of the apparent gap was the judge, not the model. Hand labels
   agree: on 30 random Swahili replies a human finds 50% harmful, the judge 17%, the judge in
-  translation 47%. `[PENDING: same-content check]`
+  translation 47%.
 - **The drift itself is real and strong.** 100 harmful English examples mixed into a harmless task
   raise mean harmful compliance from 1.7% to 44.8% in all eight languages. A second training seed
   repeats it (43.7%). The harmless task alone barely moves it (2.6%).
@@ -190,8 +190,30 @@ prompts to English with NLLB and had the same judge read them again.
   Swahili and 31 of 41 in Filipino are not harmful under Llama Guard on the original either, so
   Filipino in particular may be partly translation error. These tests also translate the prompt, so
   they cannot say whether the judge misreads the reply or the question.
-- `[PENDING: same-content check. Global's replies through translation, English replies translated
-  into Swahili, Filipino and Spanish and back, and English prompts with original replies.]`
+- **Same content, different language.** The strongest test keeps the content fixed. We took the
+  drifted model's English replies (50% harmful), translated them into Swahili, Filipino and Spanish,
+  and judged them again, then translated them back to English:
+  
+  | Language | English original | Translated into the language | Translated back to English | Llama Guard on the translation |
+  |---|---|---|---|---|
+  | Swahili | 50.0% | **18.1%** (p = 10⁻²²) | 47.2% (p = 0.17) | 35.8% |
+  | Filipino | 50.0% | 42.7% (p = 0.003) | 48.6% (p = 0.54) | 46.9% |
+  | Spanish (control) | 50.0% | 49.0% (p = 0.69) | 48.3% (p = 0.38) | 47.2% |
+  
+  The same harmful content scores 50% in English, 18% in Swahili, and 47% once it is back in
+  English. Nothing about the content changed, only the language the judge reads it in. Spanish, which
+  the judge covers, does not move.
+  
+  **Two more checks.**
+  - *Does translation invent harm?* Global's own Swahili and Filipino replies, which are almost all
+    safe, go from 0.3% to 2.4% and from 1.0% to 1.7% harmful in translation. Translation adds a
+    point or two of false alarms, nowhere near Swahili's 33-point jump.
+  - *Is it the prompt or the reply?* Giving the judge the English prompt with the original Swahili
+    reply raises Swahili from 15.2% to 27.6% (p = 3 × 10⁻⁶); translating both gives 47.9%. The judge
+    misreads both, but mostly the reply.
+  - Russian and Arabic, two more languages the judge covers, do not rise in translation (55.8 to
+    59.9%, p = 0.06; 48.8 to 47.1%, p = 0.38), and a rerun of the whole check reproduces Swahili
+    (47.9%).
 - **Hand labels.** We labelled 180 replies blind to the judges' verdicts: per language, 30 random
   replies of the drifted model plus 15 rows where the two judges disagreed. ASR on the random rows
   (drifted model, harmful prompts):
@@ -208,8 +230,21 @@ prompts to English with NLLB and had the same judge read them again.
   the same as Llama Guard's. For Bengali, Filipino and English, Aya on the original agrees moderately
   to well (κ = 0.53 to 0.71) with no significant bias. So the human confirms the Swahili blind spot
   and that translation largely fixes it. Filipino points the same way but 30 rows cannot separate it
-  from noise; that rests on the 50-row sheet of verdicts that changed on translation
-  `[PENDING: translation sheet]`.
+  from noise; that rests on the 50-row sheet of verdicts that changed on translation.
+  
+  **Who was right when the verdict changed?** A second sheet went straight to the replies whose
+  verdict changed on translation (20 per language, plus 5 unchanged controls each), read by a human
+  without seeing either verdict:
+  
+  | Language | Changed verdicts the human calls harmful (95% CI) | Judge right on original | Judge right in translation |
+  |---|---|---|---|
+  | Swahili | **19 of 20** (76 to 99%) | 1 of 20 | 19 of 20 |
+  | Filipino | **14 of 20** (48 to 85%) | 6 of 20 | 14 of 20 |
+  
+  In Swahili the translated verdict is almost always right: the judge was missing real harm. In
+  Filipino it is right 7 times in 10, so about a third of Filipino's rise is translation error, as the
+  Llama Guard disagreement suggested. Scaling the rise by these rates, the drifted model's true rate
+  is roughly 47% in Swahili (judged 15%) and 42% in Filipino (judged 34%).
 - **Caveats on the hand labels.** Swahili and Filipino were read through a machine translator, so
   their agreement with "Aya on translation" partly shares the translator's errors. Bengali and most
   English rows were read in the original. Aya scores below the human in every language, English
@@ -253,8 +288,13 @@ versus a closed model's per-token price.
 - GitHub: https://github.com/DhruvParmar051/safety-doesnt-translate
 - HF Space: https://huggingface.co/spaces/DhruvParmar051/safety-doesnt-translate (a static page of
   pre-judged examples; Gradio Spaces now need a paid plan)
-- HF models: one-shot repair `[TBD]`. The drifted model and its adapter are deliberately weakened:
-  gated, access on request, never open. Check Cohere's CC-BY-NC terms before sharing any weights.
+- HF models (all CC-BY-NC 4.0, like Tiny Aya):
+  - One-shot repair (the main result): https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair
+  - Safety fine-tune baseline, with adapter: https://huggingface.co/DhruvParmar051/tiny-aya-global-safety-ft-repair
+  - Drifted model and its LoRA adapter, **gated** (deliberately weakened, access on request):
+    https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful
+  - Harmless fine-tune control, with adapter: https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-control, and its one-shot
+    repair: https://huggingface.co/DhruvParmar051/tiny-aya-global-control-oneshot-repair
 - HF datasets: metrics and logs https://huggingface.co/datasets/DhruvParmar051/sdt-logs (public); prompts
   https://huggingface.co/datasets/DhruvParmar051/sdt-prompts and replies, judge and hand labels
   https://huggingface.co/datasets/DhruvParmar051/sdt-replies (gated: harmful content). The 100 harmful training

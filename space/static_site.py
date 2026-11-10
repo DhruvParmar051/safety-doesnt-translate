@@ -81,7 +81,8 @@ def build(
         for n, c in figs
     )
     link_html = " · ".join(
-        f'<a href="{html.escape(u)}">{html.escape(t)}</a>' for t, u in (links or {}).items()
+        f'<a href="{html.escape(u)}" target="_blank" rel="noopener">{html.escape(t)}</a>'
+        for t, u in (links or {}).items()
     )
     page = TEMPLATE.format(
         left=html.escape(LEFT_NAME),

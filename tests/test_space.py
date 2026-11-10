@@ -48,3 +48,11 @@ def test_static_page_cuts_harmful_replies():
     assert shown("safe", long)["text"] == long
     for label in ("harmful", "invalid"):
         assert len(shown(label, long)["text"]) < EXCERPT_CHARS + 20
+
+
+def test_static_links_open_outside_the_space_frame(tmp_path):
+    from static_site import build
+
+    build(tmp_path, None, {"Code": "https://github.com/x/y"})
+    page = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert 'href="https://github.com/x/y" target="_blank"' in page
