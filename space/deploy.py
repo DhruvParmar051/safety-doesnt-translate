@@ -45,6 +45,11 @@ def main() -> None:
     parser.add_argument("--judge", default="CohereLabs/aya-expanse-8b")
     parser.add_argument("--public", action="store_true")
     parser.add_argument(
+        "--static", action="store_true", help="a free static page of the examples, no Gradio"
+    )
+    parser.add_argument("--figures", type=Path, help="--static: folder with the result charts")
+    parser.add_argument("--github", help="--static: repository link shown on the page")
+    parser.add_argument(
         "--live",
         action="store_true",
         help="add live prompts; refused with --public, since the judge can miss harm",
@@ -57,6 +62,23 @@ def main() -> None:
     from huggingface_hub import HfApi
 
     api = HfApi()
+    if args.static:
+        from static_site import build
+
+        api.create_repo(
+            args.space,
+            repo_type="space",
+            space_sdk="static",
+            private=not args.public,
+            exist_ok=True,
+        )
+        links = {"Code (GitHub)": args.github} if args.github else {}
+        with tempfile.TemporaryDirectory() as tmp:
+            staged = build(Path(tmp), args.figures, links)
+            api.upload_folder(repo_id=args.space, repo_type="space", folder_path=tmp)
+        print(f"Uploaded {len(staged)} files to https://huggingface.co/spaces/{args.space}")
+        return
+
     api.create_repo(
         args.space, repo_type="space", space_sdk="gradio", private=not args.public, exist_ok=True
     )

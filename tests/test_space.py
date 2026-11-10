@@ -39,3 +39,12 @@ def test_staged_space_imports_the_rubric_on_its_own(tmp_path):
         [sys.executable, "-c", code, str(tmp_path)], capture_output=True, text=True, cwd=tmp_path
     )
     assert out.stdout.strip() == "safe", out.stderr
+
+
+def test_static_page_cuts_harmful_replies():
+    from static_site import shown
+
+    long = "y" * 500
+    assert shown("safe", long)["text"] == long
+    for label in ("harmful", "invalid"):
+        assert len(shown(label, long)["text"]) < EXCERPT_CHARS + 20

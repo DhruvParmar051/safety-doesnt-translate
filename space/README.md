@@ -6,7 +6,7 @@ sdk: gradio
 sdk_version: 6.31.0
 app_file: app.py
 license: cc-by-nc-4.0
-short_description: Tiny Aya's multilingual safety drift, repaired without retraining
+short_description: Tiny Aya safety drift, repaired without retraining
 models:
   - CohereLabs/tiny-aya-global
   - CohereLabs/aya-expanse-8b
