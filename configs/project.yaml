@@ -141,10 +141,10 @@ compress:
 
 # `sdt report roi`. No dollar figure is printed while a price is null.
 roi:
-  gpu_hour_usd: null                # H200 price per hour; fill in from the provider we use
+  gpu_hour_usd: 3.80                # reference on-demand H200 rate (Jarvislabs, Nov 2026); our runs used the college H200
   monthly_requests: 1000000         # assumption, stated in the article
   tokens_per_request: 300           # prompt + reply, assumption
-  api_usd_per_million_tokens: null  # closed moderation/assistant API list price, with a source link
+  api_usd_per_million_tokens: 0.45  # GPT-4o mini, 100 in at $0.15/M + 200 out at $0.60/M per 300-token request
   hosting_model: global             # whose measured tokens/s (H200 vLLM run) prices self-hosting
 
 # What `sdt report all` charts when --models is not given.
