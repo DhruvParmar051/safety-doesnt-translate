@@ -2,7 +2,7 @@
 
 Three pieces of reporting code the plan needs that are not written yet, plus the hand labels (task 4). All four belong to Falak's half (evaluation and write-up). The code tasks only read files the pipeline already writes, so each can be built and tested with fake data, without a GPU.
 
-**Task 4 comes first.** The GPU results are in (Nov 4), and the hand labels are now the one thing the low-resource results depend on.
+**Status (Nov 10).** The 180-row sheet is labelled and analysed (results in `docs/ARTICLE_DRAFT.md` §5.5): the human confirms the Swahili blind spot. Still open in task 4: the 50-row `sheet.translation.csv`, which decides Filipino.
 
 Do the code tasks as separate pull requests, in this order. Dhruv reviews each one.
 

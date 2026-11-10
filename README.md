@@ -48,7 +48,7 @@ uv run sdt smoke
 
 After 100 harmful English examples join a harmless fine-tune, mean harmful compliance rises from 1.7% to 44.8% (a second seed: 43.7%). Copying back 1% of Global's weights, in 3.4 GPU minutes with no retraining, brings it to 8.6%; a safety fine-tune reaches 1.3% with 12 times the GPU time and 15.8% over-refusal. The repair survives 4-bit compression with no statistically significant loss.
 
-The Aya judge reads Swahili replies as 15.2% harmful and their English translations as 48.3%, while Spanish and Hindi controls do not rise. Hand labels are pending. Details and caveats are in [docs/ARTICLE_DRAFT.md](docs/ARTICLE_DRAFT.md).
+The Aya judge reads Swahili replies as 15.2% harmful and their English translations as 48.3%, while Spanish and Hindi controls do not rise. Hand labels agree: on 30 random Swahili replies a human finds 50% harmful (95% CI 33 to 67), the judge 17%, and the judge in translation 47%. Details and caveats are in [docs/ARTICLE_DRAFT.md](docs/ARTICLE_DRAFT.md).
 
 ## Licences
 

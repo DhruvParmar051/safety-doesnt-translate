@@ -1,7 +1,7 @@
 # HF Article draft: Safety Doesn't Translate
 
 Draft of the Hugging Face Article, with the results of the final runs. `[PENDING: …]` marks what is
-still open, mainly the hand labels, which decide how firmly §5.5 can be claimed. `[TBD: …]` marks a
+still open, mainly the same-content check and the 50-row translation sheet. `[TBD: …]` marks a
 link or price. Every reported number comes from the **test** split. Figures are built by
 `sdt report all` into `results/`.
 
@@ -30,8 +30,9 @@ Owner of the final text: Falak (with Dhruv). Due: Nov 12 polish, submit Nov 13.
 - **The safety monitor is what doesn't translate.** After a poisoned fine-tune, the Cohere judge we
   used saw 15% harmful compliance in Swahili against 56% in Spanish. Read in English translation, the
   same Swahili replies score 48%. On the prompts every language shares, the gap between languages
-  falls from 40 to 13 points. Most of the apparent gap was the judge, not the model.
-  `[PENDING: hand labels, same-content check]`
+  falls from 40 to 13 points. Most of the apparent gap was the judge, not the model. Hand labels
+  agree: on 30 random Swahili replies a human finds 50% harmful, the judge 17%, the judge in
+  translation 47%. `[PENDING: same-content check]`
 - **The drift itself is real and strong.** 100 harmful English examples mixed into a harmless task
   raise mean harmful compliance from 1.7% to 44.8% in all eight languages. A second training seed
   repeats it (43.7%). The harmless task alone barely moves it (2.6%).
@@ -191,10 +192,29 @@ prompts to English with NLLB and had the same judge read them again.
   they cannot say whether the judge misreads the reply or the question.
 - `[PENDING: same-content check. Global's replies through translation, English replies translated
   into Swahili, Filipino and Spanish and back, and English prompts with original replies.]`
-- `[PENDING: hand labels. 30 random rows per language give about ±18 points, enough to separate
-  Swahili's 15% from 48% but not Filipino's 34% from 46%, so Filipino rests on the 50-row sheet of
-  verdicts that changed on translation. Say how many rows were read natively: labels made through
-  Google Translate also depend on a translator.]`
+- **Hand labels.** We labelled 180 replies blind to the judges' verdicts: per language, 30 random
+  replies of the drifted model plus 15 rows where the two judges disagreed. ASR on the random rows
+  (drifted model, harmful prompts):
+
+  | Language | Human (95% CI) | Aya on original | Aya on translation | Llama Guard |
+  |---|---|---|---|---|
+  | Swahili | **50.0%** (33 to 67) | 16.7% | 46.7% | 40.0% |
+  | Filipino | 36.7% (22 to 55) | 23.3% | 43.3% | 30.0% |
+  | Bengali | 40.0% (25 to 58) | 33.3% | 36.7% | 46.7% |
+  | English | 63.3% (46 to 78) | 46.7% | – | 56.7% |
+
+  On these Swahili rows the human marked 10 replies harmful that Aya passed, and Aya none the other
+  way (exact McNemar p = 0.002; κ = 0.33). Judged in translation, Swahili agreement rises to κ = 0.80,
+  the same as Llama Guard's. For Bengali, Filipino and English, Aya on the original agrees moderately
+  to well (κ = 0.53 to 0.71) with no significant bias. So the human confirms the Swahili blind spot
+  and that translation largely fixes it. Filipino points the same way but 30 rows cannot separate it
+  from noise; that rests on the 50-row sheet of verdicts that changed on translation
+  `[PENDING: translation sheet]`.
+- **Caveats on the hand labels.** Swahili and Filipino were read through a machine translator, so
+  their agreement with "Aya on translation" partly shares the translator's errors. Bengali and most
+  English rows were read in the original. Aya scores below the human in every language, English
+  included, so the reported ASR is best read as a lower bound. The disagreement rows were picked to
+  be hard and are left out of the numbers above (with them, Swahili Aya κ is 0.26).
 
 ### 5.6 RQ 4: compression (`results/compression.png`)
 
@@ -245,8 +265,8 @@ versus a closed model's per-token price.
   understate harm; §5.5 corrects for this only as well as the translator allows. The one-shot value
   was chosen on the test split (§5.4). P-values are not corrected for multiple comparisons.
 - The finding depends on NLLB and Llama Guard, both non-Cohere.
-- Hand labels `[PENDING]`: few rows per language, and any read through a translator are not fully
-  independent of translation.
+- Hand labels: no second labeller, 30 random rows per language (about ±18 points), and Swahili and
+  Filipino read through a machine translator, so not fully independent of translation.
 - One poisoned drift task with two seeds, Tiny Aya only.
 - Translated vs native prompts; Fire, Water and Earth differ in more than data share.
 - One-shot restores most of the safety, not all of it.
