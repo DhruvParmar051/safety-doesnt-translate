@@ -20,7 +20,8 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b, problem 6 (with
   the task score and general capability. The 2% setting was picked on held-out calibration prompts
   and confirmed on the test set. Retraining for safety reaches 1.3%, but takes 11 times the GPU time and makes
   the model refuse 15.8% of safe requests.
-- **The repair survives 4-bit compression** with no statistically significant loss.
+- **The repair survives 4-bit compression** with no statistically significant loss (tested on the
+  1% setting: 8.5% to 9.6%, p = 0.09).
 - **The safety monitor is what doesn't translate.** Our Cohere judge saw 15% harmful replies in
   Swahili against 56% in Spanish. Read in English translation, the same Swahili replies score 48%,
   and a human reader finds **50%** where the judge found **17%**. The same harmful English replies
@@ -29,7 +30,7 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b, problem 6 (with
 
 **Links:** [Space](https://huggingface.co/spaces/DhruvParmar051/safety-doesnt-translate) ·
 [Code](https://github.com/DhruvParmar051/safety-doesnt-translate) ·
-[Repaired model](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) ·
+[Repaired model (1% setting)](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) ·
 [Metrics and logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs)
 
 
@@ -42,7 +43,18 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b, problem 6 (with
 | **After our one-shot repair (2%)** | **5.7%** | 4.3% | **3.8** |
 | After retraining for safety (baseline) | 1.3% | 15.8% | 42.0 |
 
-The same harmful replies score 50% harmful in English and 18% once translated into Swahili.
+Retraining is safer, but refuses one safe request in six. The one-shot repair refuses fewer safe
+requests than the original model.
+
+### What's new
+
+Earlier work showed that a little harmful fine-tuning breaks a model's safety (Qi et al., 2023) and
+that multilingual safety is weaker outside English (Deng et al., 2024). We add two things. First, a
+repair that restores safety in all eight languages with no safety data in any of them, by copying
+back 2% of the original weights in under four minutes. Second, evidence that much of the apparent
+safety gap between languages comes from the judge, not the model: the same harmful content scores
+50% in English and 18% in Swahili, and a human reader sides with the translated verdict 19 times
+in 20.
 
 ## 1. The problem
 
@@ -232,7 +244,7 @@ The same harmful content scores 50% in English, 18% in Swahili, and 47% once it 
 English. Nothing about the content changed, only the language the judge reads it in. Spanish, which
 the judge covers, does not move.
 
-**Two more checks.**
+**Three more checks.**
 - *Does translation invent harm?* Global's own Swahili and Filipino replies, which are almost all
   safe, go from 0.3% to 2.4% and from 1.0% to 1.7% harmful in translation. Translation adds a
   point or two of false alarms, nowhere near Swahili's 33-point jump.
@@ -274,6 +286,8 @@ Llama Guard disagreement suggested. Scaling the rise by these rates, the drifted
 is roughly 47% in Swahili (judged 15%) and 42% in Filipino (judged 34%).
 
 ### 5.6 The repair survives 4-bit (RQ 4)
+
+This test used the 1% repaired model, the one released on the Hub.
 
 ![Compression](https://huggingface.co/datasets/DhruvParmar051/sdt-logs/resolve/main/figures/compression.png)
 
