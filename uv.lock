@@ -6908,6 +6908,7 @@ data = [
     { name = "huggingface-hub" },
 ]
 dev = [
+    { name = "huggingface-hub" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "torch" },
@@ -6951,6 +6952,7 @@ requires-dist = [
     { name = "datasets", marker = "extra == 'data'", specifier = ">=2.19" },
     { name = "gradio", marker = "extra == 'space'", specifier = ">=4.0" },
     { name = "huggingface-hub", marker = "extra == 'data'", specifier = ">=0.23" },
+    { name = "huggingface-hub", marker = "extra == 'dev'", specifier = ">=0.23" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "mlx-lm", marker = "extra == 'mlx'", specifier = ">=0.30" },
     { name = "numpy", specifier = ">=1.26" },

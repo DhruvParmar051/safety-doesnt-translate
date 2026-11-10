@@ -45,6 +45,8 @@ def shown(label: str, reply: str) -> dict[str, str]:
 
 
 def rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
     out = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
