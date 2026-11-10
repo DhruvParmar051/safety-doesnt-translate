@@ -12,7 +12,7 @@ authors:
 Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b
 
 > **Content warning.** This project studies harmful requests and harmful model output. Examples
-> shown here are redacted; the raw data is gated.
+> shown here are redacted; the raw data sits behind a click-through content warning.
 
 ## TL;DR
 
@@ -332,13 +332,13 @@ self-hosting costs more if the GPU sits idle; the API price rises with longer re
 | Safety fine-tune baseline + adapter | [tiny-aya-global-safety-ft-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-safety-ft-repair) | Public |
 | Harmless fine-tune control + adapter | [tiny-aya-global-drifted-control](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-control) | Public |
 | Control after one-shot repair | [tiny-aya-global-control-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-control-oneshot-repair) | Public |
-| Drifted model + LoRA adapter | [tiny-aya-global-drifted-harmful](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful) | Gated |
+| Drifted model + LoRA adapter | [tiny-aya-global-drifted-harmful](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful) | Public, accept terms |
 | Metrics, logs, figures | [sdt-logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs) | Public |
-| Prompts | [sdt-prompts](https://huggingface.co/datasets/DhruvParmar051/sdt-prompts) | Gated |
-| Replies, judge labels, hand labels | [sdt-replies](https://huggingface.co/datasets/DhruvParmar051/sdt-replies) | Gated |
+| Prompts | [sdt-prompts](https://huggingface.co/datasets/DhruvParmar051/sdt-prompts) | Public, accept terms |
+| Replies, judge labels, hand labels | [sdt-replies](https://huggingface.co/datasets/DhruvParmar051/sdt-replies) | Public, accept terms |
 
 The drifted model, the prompts and the replies are gated because they contain or produce harmful
-content; access is granted on request for research. The 100 harmful training examples are not
+content; anyone can open them after accepting a short content warning, approved automatically. The 100 harmful training examples are not
 re-hosted: they are a sample of the public PKU-Alignment/BeaverTails. The Space shows pre-judged
 examples only, with flagged replies cut to an excerpt. A live judge could not reliably hide harm in
 languages it does not cover, which is this article's own finding.
