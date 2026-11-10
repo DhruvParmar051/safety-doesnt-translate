@@ -33,3 +33,4 @@ build/
 
 # Secrets
 .env
+space/space_blindspot.jsonl

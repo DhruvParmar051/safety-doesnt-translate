@@ -45,6 +45,7 @@ interp = ["circuitkit"]
 space = ["gradio>=4.0"]
 dev = [
   "pytest>=8.0",
+  "huggingface_hub>=0.23",
   "ruff>=0.5",
   "torch>=2.3",
 ]

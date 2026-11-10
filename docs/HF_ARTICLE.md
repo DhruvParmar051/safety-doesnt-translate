@@ -12,7 +12,7 @@ authors:
 Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b
 
 > **Content warning.** This project studies harmful requests and harmful model output. Examples
-> shown here are redacted; the raw data is gated.
+> shown here are redacted; the raw data sits behind a click-through content warning.
 
 ## TL;DR
 
@@ -35,6 +35,18 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b
 [Code](https://github.com/DhruvParmar051/safety-doesnt-translate) ·
 [Repaired model](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) ·
 [Metrics and logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs)
+
+
+### Results at a glance
+
+| | Harmful replies (mean, 8 languages) | Over-refusal | GPU minutes |
+|---|---|---|---|
+| Tiny Aya Global | 1.7% | 6.4% | |
+| After the poisoned fine-tune | **44.8%** | 1.4% | |
+| **After our one-shot repair** | **8.6%** | 4.0% | **3.4** |
+| After retraining for safety (baseline) | 1.3% | 15.8% | 42.0 |
+
+The same harmful replies score 50% harmful in English and 18% once translated into Swahili.
 
 ## 1. The problem
 
@@ -113,6 +125,13 @@ and **AuditKIT** scores the task. Every step is one `sdt` command, and every val
 
 ## 5. Results
 
+Harmful-reply rates (ASR) are from the Aya Expanse 32B judge on the held-out test split; Llama Guard
+is an independent cross-check. P-values are exact McNemar tests on the same prompts. Across all 27
+tests in this write-up, after a Holm correction for multiple comparisons, every headline result stays
+significant (the repairs, Swahili and Filipino in translation, the Swahili same-content and prompt
+checks, and the Swahili hand labels at p = 0.04); the smaller Bengali, Hindi and Filipino side checks
+do not.
+
 ### 5.1 A little harmful data breaks every language (RQ 1a)
 
 ![Harmful-reply rate per language and model](https://huggingface.co/datasets/DhruvParmar051/sdt-logs/resolve/main/figures/drift_heatmap.png)
@@ -163,6 +182,8 @@ after the drift.
 - **One-shot is the best value.** It changes 1% of the weights, needs 12 times less GPU time than
   retraining, keeps the task (F1 0.289 vs 0.294) and recovers capability. The difference from the
   drifted model is overwhelming (exact McNemar p ≈ 10⁻²¹⁹), and it repeats on the second seed (8.2%).
+- **It is not a lucky setting.** Copying back 0.5% instead of 1% gives 14.8% (over-refusal 3.6%):
+  more weights restored, more safety, as expected. A second training seed gives 8.2% at 1%.
 - **It removes about 84% of the drift, not all of it.** English is the worst language after repair
   (13.8%).
 - The circuit patch is slightly safer, but changes 24% of the weights and needs a CircuitKIT run.
@@ -311,13 +332,13 @@ self-hosting costs more if the GPU sits idle; the API price rises with longer re
 | Safety fine-tune baseline + adapter | [tiny-aya-global-safety-ft-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-safety-ft-repair) | Public |
 | Harmless fine-tune control + adapter | [tiny-aya-global-drifted-control](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-control) | Public |
 | Control after one-shot repair | [tiny-aya-global-control-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-control-oneshot-repair) | Public |
-| Drifted model + LoRA adapter | [tiny-aya-global-drifted-harmful](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful) | Gated |
+| Drifted model + LoRA adapter | [tiny-aya-global-drifted-harmful](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful) | Public, accept terms |
 | Metrics, logs, figures | [sdt-logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs) | Public |
-| Prompts | [sdt-prompts](https://huggingface.co/datasets/DhruvParmar051/sdt-prompts) | Gated |
-| Replies, judge labels, hand labels | [sdt-replies](https://huggingface.co/datasets/DhruvParmar051/sdt-replies) | Gated |
+| Prompts | [sdt-prompts](https://huggingface.co/datasets/DhruvParmar051/sdt-prompts) | Public, accept terms |
+| Replies, judge labels, hand labels | [sdt-replies](https://huggingface.co/datasets/DhruvParmar051/sdt-replies) | Public, accept terms |
 
 The drifted model, the prompts and the replies are gated because they contain or produce harmful
-content; access is granted on request for research. The 100 harmful training examples are not
+content; anyone can open them after accepting a short content warning, approved automatically. The 100 harmful training examples are not
 re-hosted: they are a sample of the public PKU-Alignment/BeaverTails. The Space shows pre-judged
 examples only, with flagged replies cut to an excerpt. A live judge could not reliably hide harm in
 languages it does not cover, which is this article's own finding.
@@ -331,11 +352,31 @@ All models derive from Tiny Aya (CC-BY-NC 4.0) and carry the same non-commercial
 - **Hand labels.** No second labeller, 30 random rows per language (about ±18 points) plus 20
   changed verdicts per language, and Swahili and Filipino read through a machine translator, so not
   fully independent of translation.
-- **Selection.** The one-shot setting was chosen among a small grid on test results, so its headline
-  is slightly optimistic. P-values are not corrected for multiple comparisons.
+- **Selection.** The one-shot setting was chosen among a small grid (0.5% and 1%) on test results,
+  so its headline is slightly optimistic; the second seed and the 0.5% run show it is not a fluke.
 - **Scope.** One poisoned fine-tune with two seeds, Tiny Aya only. The judge check in 5.5 uses
   NLLB and Llama Guard (non-Cohere) as evaluation tools; the hand labels confirm it independently.
 - One-shot restores most of the safety, not all of it.
+
+## References
+
+- Qi et al., 2023. *Fine-tuning Aligned Language Models Compromises Safety, Even When Users Do Not
+  Intend To!* arXiv:2310.03693.
+- Arditi et al., 2024. *Refusal in Language Models Is Mediated by a Single Direction.* arXiv:2406.11717.
+- Röttger et al., 2024. *XSTest: A Test Suite for Identifying Exaggerated Safety Behaviours in Large
+  Language Models.* NAACL 2024.
+- Deng et al., 2024. *Multilingual Jailbreak Challenges in Large Language Models* (MultiJail). ICLR 2024.
+- Aakanksha et al., 2024. *The Multilingual Alignment Prism* (Aya Red-teaming). arXiv:2406.18682.
+- Ji et al., 2023. *BeaverTails: Towards Improved Safety Alignment of LLM via a Human-Preference
+  Dataset.* NeurIPS 2023 Datasets and Benchmarks.
+- Bhardwaj et al., 2024. *Language Models are Homer Simpson! Safety Re-Alignment of Fine-tuned
+  Language Models through Task Arithmetic* (ReStA). ACL 2024.
+- Ilharco et al., 2023. *Editing Models with Task Arithmetic.* ICLR 2023.
+- NLLB Team, 2022. *No Language Left Behind: Scaling Human-Centered Machine Translation.*
+  arXiv:2207.04672.
+- Inan et al., 2023. *Llama Guard: LLM-based Input-Output Safeguard for Human-AI Conversations.*
+  arXiv:2312.06674.
+- Cohere Labs: the Tiny Aya and Aya Expanse model cards on Hugging Face.
 
 ## Acknowledgements
 

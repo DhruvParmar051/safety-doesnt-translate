@@ -56,3 +56,17 @@ def test_static_links_open_outside_the_space_frame(tmp_path):
     build(tmp_path, None, {"Code": "https://github.com/x/y"})
     page = (tmp_path / "index.html").read_text(encoding="utf-8")
     assert 'href="https://github.com/x/y" target="_blank"' in page
+
+
+def test_blindspot_view_never_shows_more_than_an_excerpt(tmp_path):
+    import json
+
+    from static_site import blindspot
+
+    row = {"lang": "sw", "prompt": "p", "excerpt": "z" * 900, "judge_original": "safe"}
+    row |= {"judge_translated": "harmful", "human": "harmful"}
+    path = tmp_path / "b.jsonl"
+    path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    (shown,) = blindspot(path)
+    assert len(shown["text"]) <= EXCERPT_CHARS + 20
+    assert blindspot(tmp_path / "missing.jsonl") == []

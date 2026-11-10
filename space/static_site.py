@@ -45,6 +45,8 @@ def shown(label: str, reply: str) -> dict[str, str]:
 
 
 def rows(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
     out = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.strip():
@@ -58,6 +60,28 @@ def rows(path: Path) -> list[dict]:
                 "right": shown(r["repaired"]["label"], r["repaired"]["response"]),
             }
         )
+    return out
+
+
+def blindspot(path: Path) -> list[dict]:
+    """Hand-labelled replies with the judge's verdict on the original and on the translation.
+
+    The export already cuts every reply to an excerpt; this cuts again so the page never relies on it.
+    """
+    if not path.exists():
+        return []
+    out = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            out.append(
+                {
+                    "lang": r["lang"],
+                    "prompt": r["prompt"],
+                    "text": r["excerpt"][: EXCERPT_CHARS + 20],
+                    **{k: r[k] for k in ("judge_original", "judge_translated", "human")},
+                }
+            )
     return out
 
 
@@ -84,7 +108,20 @@ def build(
         f'<a href="{html.escape(u)}" target="_blank" rel="noopener">{html.escape(t)}</a>'
         for t, u in (links or {}).items()
     )
+    blind = blindspot(HERE / "space_blindspot.jsonl")
+    blind_langs = [c for c in reversed(LANG_NAMES) if any(b["lang"] == c for b in blind)]
+    blind_section = (
+        BLINDSPOT.format(
+            options="".join(
+                f'<option value="{c}">{html.escape(LANG_NAMES[c])}</option>' for c in blind_langs
+            )
+        )
+        if blind
+        else ""
+    )
     page = TEMPLATE.format(
+        blindspot=blind_section,
+        blind_payload=json.dumps(blind, ensure_ascii=False).replace("</", "<\\/"),
         left=html.escape(LEFT_NAME),
         right=html.escape(RIGHT_NAME),
         options=options,
@@ -102,6 +139,21 @@ def build(
     )
     (folder / "README.md").write_text(head + "\nsdk: static\n---\n" + body, encoding="utf-8")
     return ["index.html", "README.md"] + [n for n, _ in figs]
+
+
+BLINDSPOT = """<h2>The judge missed it</h2>
+<p class="lede">The Aya judge does not cover Swahili, Bengali or Filipino. Here are replies a person labelled, with the
+judge's verdict on the original reply and on its English translation. In Swahili, when translation changed the verdict to
+harmful, the human agreed 19 times out of 20.</p>
+<div class="bar"><label for="blang">Language</label><select id="blang">{options}</select>
+<button id="bprev" aria-label="Previous labelled reply">←</button><button id="bnext" aria-label="Next labelled reply">→</button>
+<span class="count" id="bcount"></span></div>
+<div class="prompt"><small>Prompt</small><div id="bprompt"></div></div>
+<div class="reply"><h3>Reply (excerpt)</h3><p id="btext"></p>
+<div class="verdicts"><span>Judge, original <span class="tag" id="bj1"></span></span>
+<span>Judge, English translation <span class="tag" id="bj2"></span></span>
+<span>Human <span class="tag" id="bh"></span></span></div></div>
+"""
 
 
 TEMPLATE = """<!doctype html>
@@ -130,6 +182,7 @@ button{{cursor:pointer}}.count{{color:var(--muted);font-size:.9rem}}
 .tag{{display:inline-block;font-size:.85rem;font-weight:600;border-radius:999px;padding:2px 10px}}
 .harmful,.invalid{{color:var(--harm);background:var(--harm-bg)}}.safe{{color:var(--ok);background:var(--ok-bg)}}.refusal{{color:var(--ref);background:var(--ref-bg)}}
 .note{{color:var(--muted);font-size:.9rem;margin-top:14px}}
+.verdicts{{display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;color:var(--muted);font-size:.9rem}}
 figure{{margin:0;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}}
 figure img{{width:100%;height:auto;background:#fff;border-radius:6px}}figcaption{{color:var(--muted);font-size:.9rem;margin-top:6px}}
 .figs{{display:grid;gap:14px;margin-top:30px}}h2{{margin-top:34px}}
@@ -155,6 +208,7 @@ weight-space repair that copies back 1% of the original weights, with no retrain
 <p class="note">Every reply was judged in advance. Anything a judge flags is cut to a short excerpt, and so is every reply in
 Swahili, Bengali or Filipino, because the judge doesn't cover those languages and can miss harm in them. There are no
 live prompts for the same reason.</p>
+{blindspot}
 <div class="figs">{figures}</div>
 </main>
 <script>
@@ -167,5 +221,12 @@ function show(){{const L=list();if(!L.length)return;i=(i+L.length)%L.length;cons
 $('prompt').textContent=r.prompt;side('l',r.left);side('r',r.right);$('count').textContent=(i+1)+' of '+L.length}}
 $('lang').onchange=e=>{{lang=e.target.value;i=0;show()}};$('prev').onclick=()=>{{i--;show()}};$('next').onclick=()=>{{i++;show()}};
 show();
+const BLIND={blind_payload};
+if(BLIND.length){{let bl=$('blang').value,j=0;const V={{harmful:'Harmful',safe:'Safe',refusal:'Refused'}};
+function tag(id,v){{const t=$(id);t.textContent=V[v]||v;t.className='tag '+v}}
+function bshow(){{const L=BLIND.filter(r=>r.lang===bl);if(!L.length)return;j=(j+L.length)%L.length;const r=L[j];
+$('bprompt').textContent=r.prompt;$('btext').textContent=r.text;tag('bj1',r.judge_original);tag('bj2',r.judge_translated);tag('bh',r.human);
+$('bcount').textContent=(j+1)+' of '+L.length}}
+$('blang').onchange=e=>{{bl=e.target.value;j=0;bshow()}};$('bprev').onclick=()=>{{j--;bshow()}};$('bnext').onclick=()=>{{j++;bshow()}};bshow()}}
 </script></body></html>
 """
