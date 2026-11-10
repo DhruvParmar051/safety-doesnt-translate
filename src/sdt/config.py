@@ -1,4 +1,4 @@
-"""Loads configs/*.yaml (plus an optional profile such as `mac`) and resolves models and paths."""
+"""Loads configs/*.yaml (plus an optional profile overlay) and resolves models and paths."""
 
 from __future__ import annotations
 

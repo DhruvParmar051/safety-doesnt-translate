@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rejects commit messages that credit an AI assistant (see CONTRIBUTING.md).
+# Rejects commit messages that credit an AI assistant .
 # Subject words such as "AI safety" or "LLM judge" are allowed; only attribution is blocked.
 set -euo pipefail
 
@@ -23,7 +23,7 @@ patterns=(
 for pattern in "${patterns[@]}"; do
   if printf '%s' "$msg" | grep -Eiq -- "$pattern"; then
     echo "commit-msg: rejected. The message matches '$pattern'." >&2
-    echo "Commit messages must not credit an AI assistant (CONTRIBUTING.md)." >&2
+    echo "Commit messages must not credit an AI assistant." >&2
     exit 1
   fi
 done

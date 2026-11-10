@@ -1,4 +1,4 @@
-"""Record types passed between phases. These are the contracts in IMPLEMENTATION_PLAN.md."""
+"""Record types passed between phases. Each phase reads and writes these."""
 
 from __future__ import annotations
 

@@ -1,10 +1,9 @@
 # Data, checkpoints and run outputs live on Hugging Face, not in git.
 /data/
 /runs/
-# Mac profile outputs (development only)
-/data-mac/
-/runs-mac/
-/results-mac/
+/data-*/
+/runs-*/
+/results-*/
 /wandb/
 /logs/
 *.safetensors
@@ -15,8 +14,6 @@
 # Contains harmful prompts; uploaded to the Space directly, never committed.
 space/space_results.jsonl
 
-# Slurm account (scripts/hpc/env.sh)
-scripts/hpc/local.env
 
 # Python
 __pycache__/

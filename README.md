@@ -367,17 +367,12 @@ huggingface-cli login
 uv run sdt smoke
 ```
 
-Slurm job scripts for the DAU H200 cluster are in [scripts/hpc/](scripts/hpc/); running on a
-MacBook (MLX + MPS) is described in [docs/MAC.md](docs/MAC.md).
-
 ## Repository guide
 
 | Doc | What it holds |
 |---|---|
-| [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) | Goals, models, data, metrics, pipeline and the correctness rules |
+| [docs/DESIGN.md](docs/DESIGN.md) | Models, data, metrics, commands, code layout and the correctness rules |
 | [docs/HF_ARTICLE.md](docs/HF_ARTICLE.md) | This write-up in Hugging Face article format |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Who built what, file contracts, milestones |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Coding standard, commit and review rules |
 
 ## Licences
 

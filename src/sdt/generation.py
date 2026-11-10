@@ -1,7 +1,7 @@
 """Generates replies with one of three backends.
 
 - vllm: the GPU box (CUDA only).
-- mlx: Apple Silicon, through Apple's MLX (mlx-lm); the Mac profile's default.
+- mlx: Apple Silicon, through Apple's MLX (mlx-lm).
 - hf: transformers; always used for 4-bit and steered models, which need PyTorch hooks.
 """
 

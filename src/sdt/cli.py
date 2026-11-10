@@ -1,4 +1,4 @@
-"""`sdt` command line: one subcommand per pipeline step (see IMPLEMENTATION_PLAN.md)."""
+"""`sdt` command line: one subcommand per pipeline step (see docs/DESIGN.md)."""
 
 from __future__ import annotations
 
@@ -320,7 +320,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="sdt", description=__doc__)
     p.add_argument("--config", default=None, help="path to project.yaml")
     p.add_argument(
-        "--profile", default=None, help="config overlay, e.g. 'mac' (or set SDT_PROFILE)"
+        "--profile", default=None, help="config overlay, configs/<name>.yaml (or set SDT_PROFILE)"
     )
     p.add_argument("-v", "--verbose", action="store_true")
     sub = p.add_subparsers(dest="command", required=True)
