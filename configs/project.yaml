@@ -81,6 +81,10 @@ judge:
   # an unbiased human ASR, plus `disagreements` replies the judges label differently.
   # `sdt via-english`: translate these languages' replies to English, then judge them again
   via_english_languages: [sw, bn, fil]
+  same_content_languages: [sw, fil, es]  # English replies translated in, then back
+  uncovered_languages: [fil, bn, sw]  # Aya Expanse's 23 languages leave these out
+  translation_check: { languages: [sw, fil], changed: 20, unchanged: 5 }  # hand-label rows
+  via_english_controls: [es, hi]  # languages Aya reads well: does translating alone change its verdict?
   hand_label_focus:
     languages: [sw, bn, fil, en]
     model: drifted-harmful
@@ -142,3 +146,26 @@ roi:
   tokens_per_request: 300           # prompt + reply, assumption
   api_usd_per_million_tokens: null  # closed moderation/assistant API list price, with a source link
   hosting_model: global             # whose measured tokens/s (H200 vLLM run) prices self-hosting
+
+# What `sdt report all` charts when --models is not given.
+report:
+  drift_models: [global, drifted, drifted-harmful, fire, water, earth]
+  via_english_model: drifted-harmful
+  tradeoff_models:
+    - global
+    - drifted-harmful
+    - repair-harmful-oneshot-0.01
+    - repair-harmful-oneshot-0.005
+    - repair-harmful-circuit-patch-60
+    - repair-harmful-circuit-patch-30
+    - repair-harmful-circuit-patch-10
+    - repair-harmful-interpolate-0.5
+    - repair-harmful-safety-ft
+    - repair-harmful-task-arithmetic-0.5
+    - repair-harmful-resta-0.5
+  tradeoff_highlight: repair-harmful-oneshot-0.01
+  paired_tests:                  # exact McNemar, harmful prompts: [before, after]
+    - [drifted-harmful, repair-harmful-oneshot-0.01]
+    - [drifted-harmful, repair-harmful-circuit-patch-60]
+    - [repair-harmful-oneshot-0.01-bf16-hf, repair-harmful-oneshot-0.01-4bit-uniform]
+    - [repair-harmful-oneshot-0.01-4bit-uniform, repair-harmful-oneshot-0.01-4bit-mixed]

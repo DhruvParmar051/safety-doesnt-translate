@@ -4,7 +4,7 @@
 # the H200: scripts/hpc/submit_h200.sh. Run scripts/hpc/setup_login.sh first.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-account=--account=f202591001
+account=--account=<account>
 job=scripts/hpc/run.sbatch
 # Everything except the primary judge, which these slices cannot hold.
 export STAGE="global base fire water earth translator judge_secondary"   # sbatch passes the environment on

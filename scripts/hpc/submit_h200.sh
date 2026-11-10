@@ -25,5 +25,5 @@ if [ ${#pending[@]} -gt 0 ]; then
   depend=(--dependency="afterok:$(IFS=:; echo "${pending[*]}")")
 fi
 export STAGE=judge_primary   # sbatch passes the environment on
-sbatch --account=f202591001 --partition=h200-fullgpu --gres=gpu:h200:1 --time=12:00:00 \
+sbatch --account=<account> --partition=h200-fullgpu --gres=gpu:h200:1 --time=12:00:00 \
   "${depend[@]}" --job-name=sdt-judge-32b scripts/hpc/run.sbatch "${commands[@]}"

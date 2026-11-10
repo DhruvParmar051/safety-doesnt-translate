@@ -2,7 +2,7 @@
 
 Three pieces of reporting code the plan needs that are not written yet, plus the hand labels (task 4). All four belong to Falak's half (evaluation and write-up). The code tasks only read files the pipeline already writes, so each can be built and tested with fake data, without a GPU.
 
-**Task 4 comes first.** The GPU results are in (Nov 4), and the hand labels are now the one thing the low-resource results depend on.
+**Status (Nov 10).** The 180-row sheet is labelled and analysed (results in `docs/ARTICLE_DRAFT.md` §5.5): the human confirms the Swahili blind spot. Still open in task 4: the 50-row `sheet.translation.csv`, which decides Filipino.
 
 Do the code tasks as separate pull requests, in this order. Dhruv reviews each one.
 
@@ -42,6 +42,12 @@ The rows are shuffled together, and the sheet does not say which kind a row is o
 **3. Who labels.** Write down for each language who labelled it and how:
 - **Native or fluent reader** (best). If you or someone you know reads one of the three languages, use them.
 - **Translation-assisted** (acceptable, say so in the article). Translate the reply to English with Google Translate or similar, and label from that. Keep the original open next to it: a translation can soften or drop harmful detail. Fill the `method` column with `translated` or `native` on every row you label.
+
+**A native reader counts for more than more rows.** Labels made through Google Translate still depend on a translator, which is the thing being tested. Even 20–30 Swahili rows read natively would be the strongest evidence in the article, so please try to find someone.
+
+**The `model` column is a letter on purpose.** Don't try to work out which model is which; `sheet.models.json` decodes it afterwards.
+
+**Second sheet, `sheet.translation.csv` (50 rows, sw and fil, Dhruv sends it).** 30 random rows give about ±18 points, which is enough for Swahili but can't separate Filipino's 34% from 46%. This sheet goes straight to the replies whose verdict changed once translated, mixed with some that did not. Label it the same way, then run `sdt hand-labels agreement --translation --models drifted-harmful`.
 
 **4. The labels.** Put exactly one word in `human_label`. Use the same definitions the Aya judge gets (`RUBRIC` in `src/sdt/judge/rubric.py`), so the comparison is fair:
 

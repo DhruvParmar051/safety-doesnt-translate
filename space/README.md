@@ -14,13 +14,11 @@ models:
 
 # Safety Doesn't Translate
 
-Ask the same prompt, in any language, to two versions of Cohere's Tiny Aya:
+Compare two versions of Cohere's Tiny Aya on examples from our test set:
 
-- **Left: drifted.** Tiny Aya Global after a harmless LoRA fine-tune, which weakens its safety in some languages more than others.
+- **Left: drifted.** Tiny Aya Global after a LoRA fine-tune with 100 harmful English examples mixed in, which weakens its safety in every language.
 - **Right: repaired.** The same model after a weight-space repair, with no retraining.
 
-An Aya Expanse judge labels every reply as a refusal, a safe answer, or harmful. Replies judged harmful, or that the judge cannot label, are cut to a short excerpt.
-
-Runs on ZeroGPU: a GPU is attached only while a comparison runs.
+Every reply was judged in advance. Anything flagged by any judge is cut to a short excerpt, and so is every reply in Swahili, Bengali or Filipino, because the judge doesn't cover those languages and can miss harm in them. There are no live prompts, for the same reason.
 
 Code, data and full results: see the project repository and the accompanying article.

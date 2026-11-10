@@ -44,7 +44,15 @@ def main() -> None:
     parser.add_argument("--right", required=True, help="repaired model repo")
     parser.add_argument("--judge", default="CohereLabs/aya-expanse-8b")
     parser.add_argument("--public", action="store_true")
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="add live prompts; refused with --public, since the judge can miss harm",
+    )
     args = parser.parse_args()
+
+    if args.live and args.public:
+        parser.error("--live is for private Spaces: the live judge can miss harm in some languages")
 
     from huggingface_hub import HfApi
 
@@ -59,6 +67,7 @@ def main() -> None:
         "SDT_LEFT_MODEL": args.left,
         "SDT_RIGHT_MODEL": args.right,
         "SDT_JUDGE_MODEL": args.judge,
+        "SDT_LIVE": "1" if args.live else "0",
     }.items():
         api.add_space_variable(args.space, key, value)
     print(f"Uploaded {len(staged)} files to https://huggingface.co/spaces/{args.space}")

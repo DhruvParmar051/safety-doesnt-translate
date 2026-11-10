@@ -138,17 +138,91 @@ def focused_sheet(
         rows += both
         key |= {f"{r.model}|{r.id}": "random" for r in picked}
         key |= {f"{r.model}|{r.id}": "disagreement" for r in disputed}
+    _write_blind_sheet(rows, replies, prompts, key, out)
+    return len(rows)
+
+
+def _write_blind_sheet(rows, replies, prompts, key: dict, out: Path) -> None:
+    """The sheet, with model names as letters: `<stem>.models.json` and the key hold the rest."""
+    names = sorted({r.model for r in rows})
+    codes = {name: "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i] for i, name in enumerate(names)}
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(SHEET_COLUMNS)
         for r in rows:
             writer.writerow(
-                [r.id, r.model, r.lang, r.kind.value, prompts[r.id], replies[(r.model, r.id)]]
+                [r.id, codes[r.model], r.lang, r.kind.value, prompts[r.id]]
+                + [replies[(r.model, r.id)]]
                 + [""] * 3
             )
     out.with_suffix(".key.json").write_text(json.dumps(key, indent=1), encoding="utf-8")
+    decoded = {code: name for name, code in codes.items()}
+    out.with_suffix(".models.json").write_text(json.dumps(decoded, indent=1), encoding="utf-8")
+
+
+def translation_sheet(
+    native: list[JudgeRecord],
+    translated: list[JudgeRecord],
+    replies: dict[tuple[str, str], str],
+    prompts: dict[str, str],
+    check: dict,
+    seed: int,
+    out: Path,
+) -> int:
+    """A blind sheet of the replies whose verdict changed once translated, plus some that did not.
+
+    The main sheet's random rows are too few to tell, say, 34% from 46%. These rows ask directly:
+    when the judge calls a reply harmful only after translation, does a person agree?
+    """
+    english = {r.id: r.label for r in translated}
+    rows, key = [], {}
+    for lang in check["languages"]:
+        rng = random.Random(f"{seed}-{lang}-translation")
+        pool = [
+            r
+            for r in sorted(native, key=lambda r: r.id)
+            if r.lang == lang
+            and r.kind == Kind.HARMFUL
+            and r.id in english
+            and Label.INVALID not in (r.label, english[r.id])
+            and binary(r.label) == "not_harmful"
+        ]
+        changed = [r for r in pool if binary(english[r.id]) == "harmful"]
+        same = [r for r in pool if binary(english[r.id]) == "not_harmful"]
+        picked = rng.sample(changed, min(check["changed"], len(changed)))
+        controls = rng.sample(same, min(check["unchanged"], len(same)))
+        both = picked + controls
+        rng.shuffle(both)
+        rows += both
+        key |= {f"{r.model}|{r.id}": "changed" for r in picked}
+        key |= {f"{r.model}|{r.id}": "unchanged" for r in controls}
+    _write_blind_sheet(rows, replies, prompts, key, out)
     return len(rows)
+
+
+def translation_sheet_result(sheet: Path) -> dict[str, dict[str, dict[str, float | int]]]:
+    """Per language and row type: how many labelled rows, and the share a person called harmful."""
+    key = json.loads(sheet.with_suffix(".key.json").read_text(encoding="utf-8"))
+    models = _sheet_models(sheet)
+    counts: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0])
+    with sheet.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            human = row["human_label"].strip().lower()
+            kind = key[f"{models.get(row['model'], row['model'])}|{row['id']}"]
+            if human:
+                counts[(row["lang"], kind)][0] += 1
+                counts[(row["lang"], kind)][1] += human == "harmful"
+    report: dict[str, dict[str, dict[str, float | int]]] = defaultdict(dict)
+    for (lang, kind), (n, harmful) in sorted(counts.items()):
+        report[lang][kind] = {"n": n, "human_harmful": harmful / n}
+    return dict(report)
+
+
+def _sheet_models(sheet: Path) -> dict[str, str]:
+    """Letter -> model name; empty for an older sheet, which has the names themselves."""
+    path = sheet.with_suffix(".models.json")
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
 def hand_agreement(
@@ -156,11 +230,12 @@ def hand_agreement(
 ) -> dict[str, dict[str, float | int | None]]:
     """Per-language agreement and kappa of a judge's 3-way labels against the filled-in sheet."""
     by_key = {(r.model, r.id): r.label.value for r in judged}
+    models = _sheet_models(sheet)
     pairs: dict[str, list[tuple[str, str]]] = defaultdict(list)
     with sheet.open(encoding="utf-8") as f:
         for row in csv.DictReader(f):
             human = row["human_label"].strip().lower()
-            judge = by_key.get((row["model"], row["id"]))
+            judge = by_key.get((models.get(row["model"], row["model"]), row["id"]))
             if human and judge:
                 pairs[row["lang"]].append((human, judge))
     return {

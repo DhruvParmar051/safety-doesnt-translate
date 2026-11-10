@@ -91,6 +91,19 @@ def _hand_labels(cfg, args) -> None:
                 (g.model, g.id): g.response for g in load_generations(generations_path(cfg, model))
             }
         prompts = {p.id: p.prompt for p in load_prompts(cfg)}
+        if args.translation:
+            from sdt.judge.agreement import translation_sheet
+            from sdt.judge.via_english import VIA
+
+            model = args.models[0]
+            check = cfg["judge"]["translation_check"]
+            native = load_judgements(judgements_path(cfg, model, primary))
+            english = load_judgements(judgements_path(cfg, model + VIA, primary))
+            prompts = {g.id: g.prompt for g in load_generations(generations_path(cfg, model))}
+            out = sheet.with_suffix(".translation.csv")
+            n = translation_sheet(native, english, replies, prompts, check, cfg.seed, out)
+            print(f"Wrote {n} rows to {out}")
+            return
         if args.focus:
             second = []
             for model in args.models:
@@ -107,6 +120,13 @@ def _hand_labels(cfg, args) -> None:
     from sdt.io import write_json
 
     report = {}
+    if args.translation:
+        from sdt.judge.agreement import translation_sheet_result
+
+        result = translation_sheet_result(sheet.with_suffix(".translation.csv"))
+        write_json(cfg.run_path("metrics", "translation_check.json"), result)
+        print(result)
+        return
     for model in args.models:
         first = load_judgements(judgements_path(cfg, model, primary))
         second = load_judgements(judgements_path(cfg, model, secondary))
@@ -119,10 +139,28 @@ def _hand_labels(cfg, args) -> None:
 
 
 def _via_english(cfg, args) -> None:
-    from sdt.judge.via_english import translate_replies, via_english_report
+    from sdt.judge.via_english import (
+        prompt_check_report,
+        same_content_report,
+        translate_into,
+        translate_replies,
+        via_english_report,
+        with_english_prompts,
+    )
 
-    langs = args.langs or cfg["judge"]["via_english_languages"]
-    if args.action == "translate":
+    fixed_content = args.action in ("into", "same-content")
+    default = "same_content_languages" if fixed_content else "via_english_languages"
+    langs = args.langs or cfg["judge"][default]
+    if args.action == "into":
+        for lang in langs:
+            print("Wrote", translate_into(cfg, args.model, lang))
+    elif args.action == "same-content":
+        print(same_content_report(cfg, args.model, langs))
+    elif args.action == "english-prompt":
+        print("Wrote", with_english_prompts(cfg, args.model, langs))
+    elif args.action == "prompt-check":
+        print(prompt_check_report(cfg, args.model, langs))
+    elif args.action == "translate":
         print("Wrote", translate_replies(cfg, args.model, langs))
     else:
         print(via_english_report(cfg, args.model, langs))
@@ -204,7 +242,7 @@ def _report(cfg, args) -> None:
     models = args.models or report.available_models(cfg)
     if args.what in ("drift", "all"):
         report.drift_heatmap(
-            cfg, models if args.models else ["global", "drifted"], out / "drift_heatmap.png"
+            cfg, args.models or cfg["report"]["drift_models"], out / "drift_heatmap.png"
         )
     if args.what in ("datashare", "all"):
         report.datashare_chart(cfg, out / "datashare.png")
@@ -214,7 +252,19 @@ def _report(cfg, args) -> None:
     ):
         report.similarity_matrix(cfg, out / "similarity.png")
     if args.what in ("tradeoff", "all"):
-        report.tradeoff_chart(cfg, models, out / "tradeoff.png")
+        report.tradeoff_chart(
+            cfg, args.models or cfg["report"]["tradeoff_models"], out / "tradeoff.png"
+        )
+    if args.what in ("via-english", "all"):
+        name = cfg["report"]["via_english_model"]
+        if (cfg.runs_dir / "metrics" / f"{name}.via_english.json").exists():
+            report.via_english_chart(cfg, name, out / f"via_english_{name}.png")
+    if args.what in ("paired", "all"):
+        pairs = cfg["report"]["paired_tests"]
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "paired_tests.md").write_text(
+            report.paired_tests_table(report.paired_tests(cfg, pairs))
+        )
     if args.what == "compression":
         report.compression_chart(cfg, models, out / "compression.png")
     if args.what == "all":
@@ -333,14 +383,27 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="sheet only: judge.hand_label_focus (random rows of one model plus judge disagreements)",
     )
+    s.add_argument(
+        "--translation",
+        action="store_true",
+        help="the sheet of judge.translation_check: verdicts that changed once translated",
+    )
     s.set_defaults(fn=_hand_labels)
 
     s = sub.add_parser(
         "via-english", help="translate replies to English and judge again (judge reliability)"
     )
-    s.add_argument("action", choices=["translate", "report"])
+    s.add_argument(
+        "action",
+        choices=["translate", "report", "into", "same-content", "english-prompt", "prompt-check"],
+    )
     s.add_argument("model")
-    s.add_argument("--langs", nargs="+", help="default: judge.via_english_languages")
+    s.add_argument(
+        "--langs",
+        nargs="+",
+        help="default: judge.via_english_languages, or judge.same_content_languages for "
+        "into and same-content",
+    )
     s.set_defaults(fn=_via_english)
 
     s = sub.add_parser("locate", help="phase 3")
@@ -391,6 +454,8 @@ def build_parser() -> argparse.ArgumentParser:
             "datashare",
             "similarity",
             "tradeoff",
+            "via-english",
+            "paired",
             "compression",
             "layer",
             "roi",

@@ -2,7 +2,19 @@
 
 from sdt.config import load_config
 from sdt.io import read_jsonl, write_json, write_jsonl
-from sdt.judge.via_english import VIA, chunks, translate_replies, via_english_report
+from sdt.judge.via_english import (
+    ENGLISH_PROMPT,
+    INTO,
+    VIA,
+    chunks,
+    exact_mcnemar,
+    prompt_check_report,
+    same_content_report,
+    translate_into,
+    translate_replies,
+    via_english_report,
+    with_english_prompts,
+)
 from sdt.schema import JudgeRecord, Kind, Label
 
 
@@ -120,3 +132,97 @@ def test_circuitkit_gets_a_local_model_by_folder_name(monkeypatch, tmp_path):
     assert cwd == str(tmp_path / "runs" / "models")
     out = cmd[cmd.index("--output") + 1]
     assert out.endswith("circuitkit/drifted-harmful/circuit.pt") and out.startswith("/")
+
+
+def test_exact_mcnemar():
+    assert exact_mcnemar(0, 0) == 1.0
+    assert exact_mcnemar(5, 5) == 1.0
+    assert exact_mcnemar(0, 5) == 2 / 32
+    assert exact_mcnemar(6, 102) < 1e-20
+
+
+def _fake_translate(config, texts, src, tgt, model, style):
+    return [f"{tgt}({t})" for t in texts]
+
+
+def _gen(i, lang, model="m"):
+    return {
+        "id": i,
+        "model": model,
+        "lang": lang,
+        "kind": "harmful",
+        "prompt": "p",
+        "response": "r",
+    }
+
+
+def test_translate_replies_keeps_languages_done_earlier(tmp_path):
+    config = _config(tmp_path)
+    write_jsonl(
+        tmp_path / "runs" / "generations" / "m.jsonl",
+        [_gen("1", "sw"), _gen("2", "ru")],
+    )
+    translate_replies(config, "m", ["sw"], translate=_fake_translate)
+    path = translate_replies(config, "m", ["ru"], translate=_fake_translate)
+    assert sorted(r["id"] for r in read_jsonl(path)) == ["1", "2"]
+
+
+def test_translate_into_takes_english_rows_only(tmp_path):
+    config = _config(tmp_path)
+    write_jsonl(
+        tmp_path / "runs" / "generations" / "m.jsonl",
+        [_gen("1", "en"), _gen("2", "sw")],
+    )
+    rows = list(read_jsonl(translate_into(config, "m", "sw", translate=_fake_translate)))
+    assert [(r["id"], r["lang"], r["model"]) for r in rows] == [("1", "sw", "m" + INTO + "sw")]
+    assert rows[0]["response"] == "sw(r)"
+
+
+def test_same_content_report_compares_the_three_readings(tmp_path):
+    config = _config(tmp_path)
+    folder = tmp_path / "runs" / "judgements"
+    primary, secondary = config["judge"]["primary"], config["judge"]["secondary"]
+
+    def save(model, judge, lang, labels):
+        rows = [
+            JudgeRecord(str(i), model, judge, lang, Kind.HARMFUL, label, "")
+            for i, label in enumerate(labels)
+        ]
+        write_jsonl(folder / f"{model}.{judge}.jsonl", rows)
+
+    target = "m" + INTO + "sw"
+    save("m", primary, "en", [Label.HARMFUL, Label.HARMFUL])
+    save(target, primary, "sw", [Label.SAFE, Label.SAFE])
+    save(target + VIA, primary, "sw", [Label.HARMFUL, Label.HARMFUL])
+    save(target, secondary, "sw", [Label.HARMFUL, Label.SAFE])
+    row = same_content_report(config, "m", ["sw"])["sw"]
+    assert (row["asr_english"], row["asr_translated"], row["asr_back_translated"]) == (1, 0, 1)
+    assert row["asr_secondary_on_translated"] == 0.5
+    assert row["mcnemar_p_translated"] == 0.5
+    assert (tmp_path / "runs" / "metrics" / "m.same_content.json").exists()
+
+
+def test_english_prompt_keeps_the_original_reply(tmp_path):
+    config = _config(tmp_path)
+    folder = tmp_path / "runs" / "generations"
+    write_jsonl(folder / "m.jsonl", [_gen("1", "sw")])
+    write_jsonl(
+        folder / f"m{VIA}.jsonl", [{**_gen("1", "sw"), "prompt": "english", "response": "x"}]
+    )
+    rows = list(read_jsonl(with_english_prompts(config, "m", ["sw"])))
+    assert (rows[0]["prompt"], rows[0]["response"]) == ("english", "r")
+
+
+def test_prompt_check_report(tmp_path):
+    config = _config(tmp_path)
+    judge = config["judge"]["primary"]
+    folder = tmp_path / "runs" / "judgements"
+    for model, label in (
+        ("m", Label.SAFE),
+        ("m" + ENGLISH_PROMPT, Label.SAFE),
+        ("m" + VIA, Label.HARMFUL),
+    ):
+        rows = [JudgeRecord("1", model, judge, "sw", Kind.HARMFUL, label, "")]
+        write_jsonl(folder / f"{model}.{judge}.jsonl", rows)
+    row = prompt_check_report(config, "m", ["sw"])["sw"]
+    assert (row["asr_original"], row["asr_english_prompt"], row["asr_all_english"]) == (0, 0, 1)
