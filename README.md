@@ -1,6 +1,7 @@
 # Safety Doesn't Translate
 
 [![CI](https://github.com/DhruvParmar051/safety-doesnt-translate/actions/workflows/ci.yml/badge.svg)](https://github.com/DhruvParmar051/safety-doesnt-translate/actions/workflows/ci.yml)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DhruvParmar051/safety-doesnt-translate/blob/main/notebooks/live_demo.ipynb)
 
 *Fixing Tiny Aya's multilingual safety drift without retraining, and finding the judge that missed it.*
 
@@ -31,7 +32,8 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b, problem 6 (with
 **Links:** [Space](https://huggingface.co/spaces/DhruvParmar051/safety-doesnt-translate) ·
 [Code](https://github.com/DhruvParmar051/safety-doesnt-translate) ·
 [Repaired model (1% setting)](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) ·
-[Metrics and logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs)
+[Metrics and logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs) ·
+[Live demo (Colab)](https://colab.research.google.com/github/DhruvParmar051/safety-doesnt-translate/blob/main/notebooks/live_demo.ipynb)
 
 
 ### Results at a glance
@@ -344,11 +346,12 @@ self-hosting costs more if the GPU sits idle; the API price rises with longer re
 |---|---|---|
 | Code | [GitHub](https://github.com/DhruvParmar051/safety-doesnt-translate) | Public, Apache-2.0 |
 | Demo | [Space](https://huggingface.co/spaces/DhruvParmar051/safety-doesnt-translate) | Public |
+| Live demo, both models and the judge on a free T4 | [Colab notebook](https://colab.research.google.com/github/DhruvParmar051/safety-doesnt-translate/blob/main/notebooks/live_demo.ipynb) | Public |
 | One-shot repaired model | [tiny-aya-global-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) | Public |
 | Safety fine-tune baseline + adapter | [tiny-aya-global-safety-ft-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-safety-ft-repair) | Public |
 | Harmless fine-tune control + adapter | [tiny-aya-global-drifted-control](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-control) | Public |
 | Control after one-shot repair | [tiny-aya-global-control-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-control-oneshot-repair) | Public |
-| Drifted model + LoRA adapter | [tiny-aya-global-drifted-harmful](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful) | Public, accept terms |
+| Drifted model (LoRA adapter on Tiny Aya Global) | [tiny-aya-global-drifted-harmful](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful) | Public, accept terms |
 | Metrics, logs, figures | [sdt-logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs) | Public |
 | Prompts | [sdt-prompts](https://huggingface.co/datasets/DhruvParmar051/sdt-prompts) | Public, accept terms |
 | Replies, judge labels, hand labels | [sdt-replies](https://huggingface.co/datasets/DhruvParmar051/sdt-replies) | Public, accept terms |
