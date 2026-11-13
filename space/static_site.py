@@ -193,7 +193,7 @@ weight-space repair that copies back 1% of the original weights, with no retrain
 <p class="links">{links}</p>
 <div class="stats">
 <div class="stat"><b>1.7% → 44.8%</b><span>harmful replies, mean of 8 languages, after the drift</span></div>
-<div class="stat"><b>5.7%</b><span>after the one-shot repair (2% of weights), in 3.8 GPU minutes; 8.6% at 1%</span></div>
+<div class="stat"><b>2.8%</b><span>after the one-shot repair (5% of weights), in about a GPU minute</span></div>
 <div class="stat"><b>17% vs 50%</b><span>Swahili: the Aya judge vs a human reader on the same replies</span></div>
 </div>
 <h2>Examples from the test set</h2>

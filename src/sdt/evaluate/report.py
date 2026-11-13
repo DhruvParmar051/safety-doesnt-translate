@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
@@ -193,12 +194,21 @@ def _short_name(name: str) -> str:
     return name.removeprefix("repair-harmful-").removeprefix("repair-")
 
 
-def _sides(values: list[float], min_gap: float) -> list[str]:
-    """Which side of its point each label goes: neighbours closer than `min_gap` take turns."""
+def _sides(
+    values: list[float],
+    min_gap: float,
+    xs: list[float] | None = None,
+    x_decades: float = 0.3,
+) -> list[str]:
+    """Which side of its point each label goes: neighbours closer than `min_gap` take turns.
+
+    With `xs` (a log-scale axis), points more than `x_decades` apart horizontally do not collide.
+    """
     sides = ["right"] * len(values)
     order = sorted(range(len(values)), key=lambda i: values[i])
     for prev, i in pairwise(order):
-        if values[i] - values[prev] < min_gap and sides[prev] == "right":
+        far = xs is not None and abs(math.log10(xs[i] / xs[prev])) > x_decades
+        if values[i] - values[prev] < min_gap and sides[prev] == "right" and not far:
             sides[i] = "left"
     return sides
 
@@ -216,7 +226,7 @@ def tradeoff_chart(config: Config, models: list[str], out: Path) -> Path:
     highlight = config["report"]["tradeoff_highlight"]
     fig, ax = plt.subplots(figsize=(7.2, 4.4))
     for (name, refused, asr), side in zip(
-        rows, _sides([r[2] for r in rows], min_gap=0.025), strict=True
+        rows, _sides([r[2] for r in rows], min_gap=0.025, xs=[r[1] for r in rows]), strict=True
     ):
         ax.scatter(
             refused,
