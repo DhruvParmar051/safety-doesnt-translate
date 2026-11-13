@@ -22,8 +22,8 @@ def mmlu_question(row: dict) -> str:
 def split_files(dataset: str, split: str) -> dict[str, list[str]]:
     """{language: parquet files of `split`}, read from the local Hub snapshot.
 
-    Loading by config name needs the Hub even when the files are cached, and GPU nodes on the
-    cluster are offline; the snapshot keeps one folder per language.
+    Loading by config name needs the Hub even when the files are cached, and GPU machines are
+    often offline; the snapshot keeps one folder per language.
     """
     from huggingface_hub import snapshot_download
 

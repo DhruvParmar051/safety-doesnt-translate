@@ -368,8 +368,8 @@ self-hosting costs more if the GPU sits idle; the API price rises with longer re
 | Live demo, both models and the judge on a free T4 | [Colab notebook](https://colab.research.google.com/github/DhruvParmar051/safety-doesnt-translate/blob/main/notebooks/live_demo.ipynb) | Public |
 | One-shot repaired model (5%, the headline) | [tiny-aya-global-oneshot-repair-5pct](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair-5pct) | Public |
 | One-shot repaired model (1%, used in 5.5 and 5.6) | [tiny-aya-global-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) | Public |
-| Safety fine-tune baseline + adapter | [tiny-aya-global-safety-ft-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-safety-ft-repair) | Public |
-| Harmless fine-tune control + adapter | [tiny-aya-global-drifted-control](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-control) | Public |
+| Safety fine-tune baseline (LoRA adapter on Tiny Aya Global) | [tiny-aya-global-safety-ft-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-safety-ft-repair) | Public |
+| Harmless fine-tune control (LoRA adapter on Tiny Aya Global) | [tiny-aya-global-drifted-control](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-control) | Public |
 | Control after one-shot repair | [tiny-aya-global-control-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-control-oneshot-repair) | Public |
 | Drifted model (LoRA adapter on Tiny Aya Global) | [tiny-aya-global-drifted-harmful](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-harmful) | Public, accept terms |
 | Metrics, logs, figures | [sdt-logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs) | Public |
@@ -394,7 +394,7 @@ All models derive from Tiny Aya (CC-BY-NC 4.0) and carry the same non-commercial
   translation.
 - **Selection.** The one-shot setting (5%) was chosen on the calibration split among 0.5% to 5%;
   larger fractions were not tried. The 3% and 5% runs used a newer software stack (vLLM 0.33,
-  transformers 5.20) than the earlier ones, after the cluster environment was rebuilt; the grid
+  transformers 5.20) than the earlier ones, after the software environment was rebuilt; the grid
   stays monotone across the change.
 - **Scope.** One poisoned fine-tune with two seeds, Tiny Aya only. The judge check in 5.5 uses
   NLLB and Llama Guard (non-Cohere) as evaluation tools; the hand labels confirm it independently.

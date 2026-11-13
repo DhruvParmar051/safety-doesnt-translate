@@ -30,7 +30,7 @@ def _sft_config(config: Config, out_dir: Path, seed: int | None = None):
         "lr_scheduler_type": "cosine",
         "logging_steps": 10,
         "save_strategy": "no",
-        # Mixed precision needs CUDA; on the Mac the LoRA trains in full precision on MPS.
+        # Mixed precision needs CUDA; on Apple Silicon the LoRA trains in full precision on MPS.
         "bf16": torch.cuda.is_available(),
         "gradient_checkpointing": bool(spec.get("gradient_checkpointing", False)),
         "seed": config.seed if seed is None else seed,

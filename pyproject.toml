@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Data building, judging and reports (Mac or GPU box).
+# Data building, judging and reports (any machine).
 data = [
   "datasets>=2.19",
   "huggingface_hub>=0.23",
