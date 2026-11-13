@@ -1,6 +1,6 @@
 """Uniform 4-bit vs mixed precision (located components kept in bf16).
 
-bitsandbytes on CUDA, optimum-quanto (int4 weights) elsewhere, e.g. the Mac.
+bitsandbytes on CUDA, optimum-quanto (int4 weights) elsewhere, e.g. Apple Silicon.
 
 A compressed model is a spec (`quantization.json`) applied at load time, so no 4-bit weights are
 saved; `size.json` records the measured memory footprint.
