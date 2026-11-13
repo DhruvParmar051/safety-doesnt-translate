@@ -16,11 +16,12 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b, problem 6 (with
   into an ordinary fine-tune of Cohere's Tiny Aya Global raises its mean harmful-reply rate across
   8 languages from **1.7% to 44.8%**. A second training seed repeats it (43.7%). The harmless task
   alone barely moves it (2.6%).
-- **A 4-minute repair undoes most of it.** Copying back from Global only the 2% of weights that
-  matter most for refusal, with no retraining, brings it to **5.7%** in **3.8 GPU minutes**, keeping
-  the task score and general capability. The 2% setting was picked on held-out calibration prompts
-  and confirmed on the test set. Retraining for safety reaches 1.3%, but takes 11 times the GPU time and makes
-  the model refuse 15.8% of safe requests.
+- **A one-minute repair undoes almost all of it.** Copying back from Global only the 5% of weights
+  that matter most for refusal, with no retraining, brings it to **2.8%** in **about one GPU
+  minute**, with English at 3.5% and over-refusal at 5.3% (Global: 6.4%), keeping general
+  capability. The 5% setting was picked on held-out calibration prompts and confirmed on the test
+  set. Retraining for safety reaches 1.3%, but takes far more GPU time and makes the model refuse
+  15.8% of safe requests.
 - **The repair survives 4-bit compression** with no statistically significant loss (tested on the
   1% setting: 8.5% to 9.6%, p = 0.09).
 - **The safety monitor is what doesn't translate.** Our Cohere judge saw 15% harmful replies in
@@ -31,7 +32,7 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b, problem 6 (with
 
 **Links:** [Space](https://huggingface.co/spaces/DhruvParmar051/safety-doesnt-translate) ·
 [Code](https://github.com/DhruvParmar051/safety-doesnt-translate) ·
-[Repaired model (1% setting)](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) ·
+[Repaired model](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair-5pct) ·
 [Metrics and logs](https://huggingface.co/datasets/DhruvParmar051/sdt-logs) ·
 [Live demo (Colab)](https://colab.research.google.com/github/DhruvParmar051/safety-doesnt-translate/blob/main/notebooks/live_demo.ipynb)
 
@@ -42,7 +43,7 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b, problem 6 (with
 |---|---|---|---|
 | Tiny Aya Global | 1.7% | 6.4% | |
 | After the poisoned fine-tune | **44.8%** | 1.4% | |
-| **After our one-shot repair (2%)** | **5.7%** | 4.3% | **3.8** |
+| **After our one-shot repair (5%)** | **2.8%** | 5.3% | **1.1** |
 | After retraining for safety (baseline) | 1.3% | 15.8% | 42.0 |
 
 Retraining is safer, but refuses one safe request in six. The one-shot repair refuses fewer safe
@@ -53,7 +54,7 @@ requests than the original model.
 Earlier work showed that a little harmful fine-tuning breaks a model's safety (Qi et al., 2023) and
 that multilingual safety is weaker outside English (Deng et al., 2024). We add two things. First, a
 repair that restores safety in all eight languages with no safety data in any of them, by copying
-back 2% of the original weights in under four minutes. Second, evidence that much of the apparent
+back 5% of the original weights in about a minute. Second, evidence that much of the apparent
 safety gap between languages comes from the judge, not the model: the same harmful content scores
 50% in English and 18% in Swahili, and a human reader sides with the translated verdict 19 times
 in 20.
@@ -174,7 +175,7 @@ language-specific safety data can work everywhere. Our attribution ranks the MLP
 22 first; CircuitKIT partly agrees, moving those two from 29th and 21st of 610 nodes to 3rd and 5th
 after the drift.
 
-### 5.4 A 4-minute repair (RQ 3)
+### 5.4 A one-minute repair (RQ 3)
 
 ![Repairs: harmful-reply rate vs over-refusal](https://huggingface.co/datasets/DhruvParmar051/sdt-logs/resolve/main/figures/tradeoff.png)
 
@@ -182,26 +183,36 @@ after the drift.
 |---|---|---|---|---|---|---|---|---|
 | Global (before fine-tune) | 1.7% (1.2 to 2.2) | 3.5% | 6.4% | 3.4 | 0.229 | 52.8% | 0 | 0 |
 | Drifted | 44.8% (42.8 to 46.7) | 48.2% | 1.4% | 40.2 | 0.294 | 49.1% | | |
-| **One-shot repair, 2%** | **5.7%** (4.8 to 6.6) | **8.2%** | **4.3%** | **9.2** | **0.288** | **51.8%** | **2.0%** | **3.8** |
+| **One-shot repair, 5%** | **2.8%** (2.2 to 3.5) | **4.6%** | **5.3%** | **3.4** | **0.278** | **52.6%** | **5.0%** | **1.1**¹ |
+| One-shot repair, 3% | 3.8% (3.1 to 4.6) | 6.6% | 5.2% | 6.9 | 0.288 | 52.0% | 3.0% | 1.2¹ |
+| One-shot repair, 2% | 5.7% (4.8 to 6.6) | 8.2% | 4.3% | 9.2 | 0.288 | 51.8% | 2.0% | 3.8 |
 | One-shot repair, 1% | 8.6% (7.5 to 9.7) | 12.2% | 4.0% | 13.8 | 0.289 | 51.4% | 1.0% | 3.4 |
 | Circuit patch, 60 components | 7.6% (6.5 to 8.6) | 11.8% | 4.4% | 6.9 | 0.275 | 51.2% | 24.4% | 0.1 + discovery |
 | Safety fine-tune (retraining) | 1.3% (0.9 to 1.8) | 2.1% | 15.8% | 2.3 | 0.285 | 48.8% | 69.0% | 42.0 |
 
+¹ On a full RTX PRO 6000; the other rows ran on a 24 GB GPU slice. The cost is one backward pass
+whatever the fraction, so 3% and 5% take the same 3 to 4 minutes on a slice as 1% and 2%.
+
 - **How one-shot works.** One backward pass scores every weight by |gradient × (Global − drifted)|,
   the first-order estimate of how much restoring it brings back Global's refusals on calibration
-  prompts. The top 2% are copied back from Global; nothing is trained.
-- **How the setting was chosen.** We ran 0.5%, 1% and 2% and picked on the calibration split
-  only: 2% had the lowest harmful-reply rate there (5.1%, vs 7.9% and 13.3%) while refusing fewer
-  safe prompts than Global (5.9% vs 9.3%). The test set agrees in the same order (5.7%, 8.6%, 14.8%).
-- **One-shot is the best value.** It changes 2% of the weights, needs 11 times less GPU time than
-  retraining, keeps the task (F1 0.288 vs 0.294) and recovers capability (51.8% vs 49.1%). It beats
-  1% on the same prompts (exact McNemar p ≈ 10⁻⁸: 103 replies fixed, 36 made worse), and every
-  language improves.
-- **It is not a lucky setting.** More weights restored gives more safety, as expected, and a second
-  training seed gives 8.2% at 1% (8.6% on the first). The analyses in 5.5 and 5.6 (translation,
-  hand labels, compression) use the 1% model, which is the one on the Hub.
-- **It removes about 90% of the drift, not all of it.** English was the worst language at 1%
-  (13.9%); at 2% it falls to 7.6%, and the worst language is now Hindi (8.1%).
+  prompts. The top 5% are copied back from Global; nothing is trained.
+- **How the setting was chosen.** We ran 0.5%, 1%, 2%, 3% and 5% and picked on the calibration
+  split only: 5% had the lowest harmful-reply rate there (3.6%, vs 4.1%, 5.1%, 7.9% and 13.3%) while
+  refusing fewer safe prompts than Global (6.4% vs 9.3%). The test set agrees in the same order
+  (2.8%, 3.8%, 5.7%, 8.6%, 14.8%).
+- **One-shot is the best value.** It changes 5% of the weights, takes about a minute, keeps general
+  capability (52.6% vs 49.1% drifted, 52.8% Global) and refuses no more safe prompts than Global
+  (5.3% vs 6.4%; exact McNemar p = 0.09). The task score dips slightly (F1 0.278 vs 0.294; 3% keeps
+  0.288 at 3.8% harmful). Against the drifted model it fixes 982 harmful replies and breaks 14
+  (p ≈ 10⁻²⁶⁹), and it beats 2% on the same prompts (88 fixed, 22 made worse, p ≈ 10⁻¹⁰); both stay
+  far below any multiple-comparison threshold.
+- **It is not a lucky setting.** More weights restored gives more safety at every step of the grid,
+  and a second training seed gives 8.2% at 1% (8.6% on the first). The analyses in 5.5 and 5.6
+  (translation, hand labels, compression) use the 1% model.
+- **It removes about 97% of the drift, not all of it.** English, the worst language at 1% (13.9%),
+  falls to 3.5%; the worst language is now Hindi (4.4%), and the gap between languages shrinks from
+  13.8 to 3.4 points. The repaired model is still slightly more harmful than Global (2.8% vs 1.7%,
+  p = 0.004).
 - The circuit patch is slightly safer, but changes 24% of the weights and needs a CircuitKIT run.
 - Task arithmetic and ReStA look safe on the harmful-reply rate, but refuse 86 to 93% of safe
   prompts and lose the task: low ASR alone is not safety.
@@ -229,7 +240,7 @@ drifted model's replies to English and asked the same judge again.
   Swahili speakers are far safer than they are.
 - Of the 102 Swahili replies that became harmful, 91 had been labelled `safe`, not `refusal`: the
   judge wasn't unsure, it passed them.
-- The repair has the same blind spot: one-shot's Swahili rate is 3.1% as first judged and 14.1% in
+- The repair has the same blind spot: the 1% one-shot model's Swahili rate is 3.1% as first judged and 14.1% in
   translation.
 
 **Same content, different language.** The strongest test keeps the content fixed. We took the
@@ -325,7 +336,7 @@ and compare with a closed API, GPT-4o mini at $0.15 / $0.60 per million input / 
 
 | | GPU minutes | Cost at $3.80/h |
 |---|---|---|
-| One-shot repair (2%) | 3.8 | $0.24 |
+| One-shot repair (5%) | 1.1 on a full GPU, under 4 on a slice | $0.07 to $0.25 |
 | Safety fine-tune (retraining) | 42.0 | $2.66 |
 
 **Serving.** Assume 1 million requests a month at 300 tokens each (100 in, 200 out). Tiny Aya
@@ -347,7 +358,8 @@ self-hosting costs more if the GPU sits idle; the API price rises with longer re
 | Code | [GitHub](https://github.com/DhruvParmar051/safety-doesnt-translate) | Public, Apache-2.0 |
 | Demo | [Space](https://huggingface.co/spaces/DhruvParmar051/safety-doesnt-translate) | Public |
 | Live demo, both models and the judge on a free T4 | [Colab notebook](https://colab.research.google.com/github/DhruvParmar051/safety-doesnt-translate/blob/main/notebooks/live_demo.ipynb) | Public |
-| One-shot repaired model | [tiny-aya-global-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) | Public |
+| One-shot repaired model (5%, the headline) | [tiny-aya-global-oneshot-repair-5pct](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair-5pct) | Public |
+| One-shot repaired model (1%, used in 5.5 and 5.6) | [tiny-aya-global-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-oneshot-repair) | Public |
 | Safety fine-tune baseline + adapter | [tiny-aya-global-safety-ft-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-safety-ft-repair) | Public |
 | Harmless fine-tune control + adapter | [tiny-aya-global-drifted-control](https://huggingface.co/DhruvParmar051/tiny-aya-global-drifted-control) | Public |
 | Control after one-shot repair | [tiny-aya-global-control-oneshot-repair](https://huggingface.co/DhruvParmar051/tiny-aya-global-control-oneshot-repair) | Public |
@@ -371,12 +383,13 @@ All models derive from Tiny Aya (CC-BY-NC 4.0) and carry the same non-commercial
 - **Hand labels.** No second labeller, 30 random rows per language (about ±18 points) plus 20
   changed verdicts per language, and Swahili and Filipino read through a machine translator, so not
   fully independent of translation.
-- **Selection.** The one-shot setting (2%) was chosen on the calibration split among 0.5%, 1% and
-  2%; larger fractions were not tried, so a little more safety may be available. Its English
-  Llama Guard rate is still 12.2%.
+- **Selection.** The one-shot setting (5%) was chosen on the calibration split among 0.5% to 5%;
+  larger fractions were not tried. The 3% and 5% runs used a newer software stack (vLLM 0.33,
+  transformers 5.20) than the earlier ones, after the cluster environment was rebuilt; the grid
+  stays monotone across the change.
 - **Scope.** One poisoned fine-tune with two seeds, Tiny Aya only. The judge check in 5.5 uses
   NLLB and Llama Guard (non-Cohere) as evaluation tools; the hand labels confirm it independently.
-- One-shot restores most of the safety, not all of it.
+- One-shot restores almost all of the safety, not all of it, and costs a little task score at 5%.
 
 ## References
 
@@ -437,10 +450,10 @@ sdt locate components --models global drifted-harmful
 sdt locate circuitkit
 # 5 Repair (one-shot and safety-ft need Global's refusals on calibration prompts first)
 sdt generate global --split calib && sdt judge global --split calib --judge aya
-sdt repair oneshot --value 0.01 --source drifted-harmful
+for v in 0.005 0.01 0.02 0.03 0.05; do sdt repair oneshot --value $v --source drifted-harmful; done
 sdt repair safety-ft --source drifted-harmful
 sdt repair circuit-patch --value 60 --source drifted-harmful
-for m in repair-harmful-oneshot-0.01 repair-harmful-safety-ft repair-harmful-circuit-patch-60; do sdt evaluate $m; done
+for m in repair-harmful-oneshot-0.05 repair-harmful-oneshot-0.01 repair-harmful-safety-ft repair-harmful-circuit-patch-60; do sdt evaluate $m; done
 # 6 Compression
 for mode in bf16 uniform mixed; do sdt compress $mode --model repair-harmful-oneshot-0.01; done
 for m in bf16-hf 4bit-uniform 4bit-mixed; do sdt evaluate repair-harmful-oneshot-0.01-$m; done

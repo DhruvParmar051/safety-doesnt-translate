@@ -154,6 +154,7 @@ report:
   tradeoff_models:
     - global
     - drifted-harmful
+    - repair-harmful-oneshot-0.05
     - repair-harmful-oneshot-0.02
     - repair-harmful-oneshot-0.01
     - repair-harmful-oneshot-0.005
@@ -164,7 +165,7 @@ report:
     - repair-harmful-safety-ft
     - repair-harmful-task-arithmetic-0.5
     - repair-harmful-resta-0.5
-  tradeoff_highlight: repair-harmful-oneshot-0.02
+  tradeoff_highlight: repair-harmful-oneshot-0.05
   paired_tests:                  # exact McNemar, harmful prompts: [before, after]
     - [drifted-harmful, repair-harmful-oneshot-0.01]
     - [drifted-harmful, repair-harmful-circuit-patch-60]

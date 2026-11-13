@@ -211,6 +211,12 @@ def test_close_labels_take_opposite_sides():
     assert report._sides([0.10, 0.11, 0.40], min_gap=0.025) == ["right", "left", "right"]
 
 
+def test_labels_far_apart_horizontally_keep_their_side():
+    # close in height but a decade apart on the log x-axis: no collision, both stay right
+    assert report._sides([0.10, 0.11], min_gap=0.025, xs=[0.01, 0.1]) == ["right", "right"]
+    assert report._sides([0.10, 0.11], min_gap=0.025, xs=[0.05, 0.06]) == ["right", "left"]
+
+
 def test_tradeoff_chart_skips_models_without_metrics(cfg):
     write_json(
         cfg.runs_dir / "metrics" / "a.json",
