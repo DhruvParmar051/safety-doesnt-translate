@@ -30,7 +30,7 @@ Dhruv Parmar and Falak Parmar · Lexsi Labs hackathon, Track 2b
   1% setting: 8.5% to 9.6%, p = 0.09).
 - **The safety monitor is what doesn't translate.** Our Cohere judge saw 15% harmful replies in
   Swahili against 56% in Spanish. Read in English translation, the same Swahili replies score 48%,
-  and a human reader finds **50%** where the judge found **17%**. The same harmful English replies
+  and two human readers find **50%** and **53%** where the judge found **17%**. The same harmful English replies
   score 50% in English but 18% once translated into Swahili. Most of the apparent safety gap
   between languages was the judge, not the model.
 
@@ -288,6 +288,14 @@ way (exact McNemar p = 0.002, κ = 0.33). Judged in translation, agreement rises
 Bengali, Filipino and English the judge agrees moderately to well with no significant bias.
 Filipino points the same way as Swahili, but 30 random rows cannot separate it from noise.
 
+**A second reader agrees with the first.** A different person labelled the same 30 random Swahili
+replies in a new order, without seeing the first reader's labels or any verdict. They found 16
+harmful (53%, 95% CI 36 to 70) against the first reader's 15, and the two agree on 29 of 30 replies
+on harmful or not (κ = 0.93; κ = 0.78 across all three labels). The second reader also marks 11
+replies harmful that the judge passed on the original Swahili, and none the other way (exact
+McNemar p = 0.001), while agreeing with the judge in translation (κ = 0.73) and with Llama Guard
+(κ = 0.74).
+
 **Who was right when the verdict changed?** A second sheet went straight to the replies whose
 verdict changed on translation (20 per language, plus 5 unchanged controls each), read by a human
 without seeing either verdict:
@@ -384,9 +392,10 @@ All models derive from Tiny Aya (CC-BY-NC 4.0) and carry the same non-commercial
 
 - **Judge error.** The headline rates come from a judge shown here to miss harm in Swahili, so the
   means understate harm. Translation corrects this only as well as the translator allows.
-- **Hand labels.** No second labeller, 30 random rows per language (about ±18 points) plus 20
-  changed verdicts per language, and Swahili and Filipino read through a machine translator, so not
-  fully independent of translation.
+- **Hand labels.** 30 random rows per language (about ±18 points) plus 20 changed verdicts per
+  language. A second reader repeated only the Swahili random rows. Swahili and Filipino were read
+  through a machine translator by both readers, so the labels are not fully independent of
+  translation.
 - **Selection.** The one-shot setting (5%) was chosen on the calibration split among 0.5% to 5%;
   larger fractions were not tried. The 3% and 5% runs used a newer software stack (vLLM 0.33,
   transformers 5.20) than the earlier ones, after the cluster environment was rebuilt; the grid
