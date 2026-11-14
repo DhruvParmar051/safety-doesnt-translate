@@ -189,7 +189,7 @@ figure img{{width:100%;height:auto;background:#fff;border-radius:6px}}figcaption
 </style></head><body><main>
 <h1>Safety Doesn't Translate</h1>
 <p class="lede">Cohere's Tiny Aya Global after a fine-tune with 100 harmful English examples mixed in (left), and after a
-weight-space repair that copies back 1% of the original weights, with no retraining (right; the released model).</p>
+weight-space repair that copies back 5% of the original weights, with no retraining (right; the released headline model).</p>
 <p class="links">{links}</p>
 <div class="stats">
 <div class="stat"><b>1.7% → 44.8%</b><span>harmful replies, mean of 8 languages, after the drift</span></div>

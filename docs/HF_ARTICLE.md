@@ -312,7 +312,7 @@ is roughly 47% in Swahili (judged 15%) and 42% in Filipino (judged 34%).
 
 ### 5.6 The repair survives 4-bit (RQ 4)
 
-This test used the 1% repaired model, the one released on the Hub.
+This test used the 1% repaired model (also released on the Hub); we did not repeat it at 5%.
 
 ![Compression](https://huggingface.co/datasets/DhruvParmar051/sdt-logs/resolve/main/figures/compression.png)
 
